@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-vitepress-auto-nav",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "自动生成vitepress的nav与sidebar",
   "keywords": [
     "vite-plugin",
