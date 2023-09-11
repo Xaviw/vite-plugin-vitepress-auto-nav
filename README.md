@@ -1,72 +1,36 @@
-# vite-plugin-vitepress-auto-sidebar
+# vite-plugin-vitepress-auto-nav
 
-The vite plugin that automatically generates sidebar data by scanning directories, based on vitepress
+自动生成 VitePress 的 nav 与 sidebar 配置
 
-[![Npm](https://img.shields.io/npm/v/vite-plugin-vitepress-auto-sidebar)](http://blog.csdn.net/a_zhon)
-[![Download](https://img.shields.io/npm/dt/vite-plugin-vitepress-auto-sidebar)](http://blog.csdn.net/a_zhon)
-[![License](https://img.shields.io/github/license/qc2168/vite-plugin-vitepress-auto-sidebar)](http://blog.csdn.net/a_zhon)
+## 🕯️ 使用
 
-## ✨ Feature
-
-🚀 Automatically create the sidebar data and injected into `config.ThemeConfig.sidebar`
-
-🤖 Listen globally for `*.md` files to automatically update sidebar data when they are added or deleted
-
-## 🕯️ Usage
-
-install vite-plugin-vitepress-auto-sidebar
+安装 vite-plugin-vitepress-auto-sidebar
 
 ```bash
 # recommend using pnpm packageManager
-pnpm i vite-plugin-vitepress-auto-sidebar
+pnpm i vite-plugin-vitepress-auto-nav -D
 # or yarn
-yarn add vite-plugin-vitepress-auto-sidebar
+yarn add vite-plugin-vitepress-auto-nav -D
 # or npm
-npm install vite-plugin-vitepress-auto-sidebar
+npm i vite-plugin-vitepress-auto-nav -D
 ```
 
-add plugin in `.vitepress/config.ts`
+添加插件到 `.vitepress/config.ts`
 
-```typescript
-import AutoSidebar from 'vite-plugin-vitepress-auto-sidebar';
+```ts
+import AutoNav from 'vite-plugin-vitepress-auto-nav'
 
 export default defineConfig({
   vite: {
     plugins: [
-      // add plugin
-      AutoSidebar({
-        // You can also set options to adjust sidebar data
-        // see option document below
-      })
-    ]
+      AutoNav({
+        // 可以自定义配置
+      }),
+    ],
   },
 })
 ```
 
-> Warning, you must clear the sidebar objects in the config.ts or it may not work properly
-
-`pnpm run dev`
-
-```
- [auto-sidebar] injected sidebar data successfully
-```
-
-> If you see the above message, it means the plugin is working properly, otherwise there may be a problem
-
-### 🛠️ Options
-
-| name                     | description                                                                                                                                       | type                                                               | default |
-|--------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------|---------|
-| ignoreList               | ignore specified folder                                                                                                                           | `string[]`                                                         | `true`  |
-| path                     | create scan path for the sidebar                                                                                                                  | `string`                                                           | `/docs` |
-| ignoreIndexItem          | ignore the page sidebar with only index.md                                                                                                        | `boolean`                                                          | `false` |
-| collapsed                | By adding collapsed option to the sidebar group, it shows a toggle button to hide/show each section,For specific usage, please refer to VitePress | `boolean`                                                          | `false` |
-| deletePrefix             | deletes the md file prefix                                                                                                                        | `string`                                                           |         |
-| sideBarResolved          | receive complete sidebar objects for custom modifications                                                                                         | `(data: DefaultTheme.SidebarMulti) => DefaultTheme.SidebarMulti`   |         |
-| sideBarItemsResolved     | receive complete sidebar subItem objects for custom modifications                                                                                 | `(data: DefaultTheme.SidebarItem[]) => DefaultTheme.SidebarItem[]` |         |
-| beforeCreateSideBarItems | obtain a list of file names scanned before generating sidebar subitems. If you want to sort sidebar data, it is recommended to use it             | `(data: string[]) => string[]`                                     |         |
-| titleFromFile            | read title from md file                                                                                                                           | `boolean`                                                          | `false` |
-
 ## License
 
-[MIT](./LICENSE) License © 2023 [QC2168](https://github.com/QC2168)
+[MIT](./LICENSE) License © 2023 [Xaviw](https://github.com/Xaviw)
