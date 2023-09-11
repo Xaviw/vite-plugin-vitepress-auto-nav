@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "declaration": true,
+    /* Language and Environment */
+    "target": "ESNext",
+    /* Modules */
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "lib": [
+      "ESNext"
+    ],
+    /* Emit */
+    "noEmit": true,
+    "removeComments": true,
+    /* Interop Constraints */
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    /* Type Checking */
+    "strict": true,
+    "strictFunctionTypes": true,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    /* Output Formatting */
+    "preserveWatchOutput": true,
+    /* Completeness */
+    "skipLibCheck": true
+  },
+  "exclude": [
+    "node_modules"
+  ]
+}

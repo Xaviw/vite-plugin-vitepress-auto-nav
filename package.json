@@ -1,0 +1,53 @@
+{
+  "name": "vite-plugin-vitepress-auto-nav",
+  "version": "1.0.0",
+  "description": "自动生成vitepress的nav与sidebar",
+  "keywords": [
+    "vite-plugin",
+    "vitepress",
+    "nav",
+    "sidebar",
+    "auto"
+  ],
+  "homepage": "https://xaviw.github.io/XaviDocs/",
+  "bugs": "https://github.com/Xaviw/vite-plugin-vitepress-auto-nav/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Xaviw/vite-plugin-vitepress-auto-nav.git"
+  },
+  "license": "MIT",
+  "author": "xavi",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.cjs",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rollup -c"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.1",
+    "@types/node": "^20.5.9",
+    "fast-glob": "^3.3.1",
+    "fs-extra": "^11.1.1",
+    "rollup": "^3.29.1",
+    "rollup-plugin-typescript2": "^0.35.0",
+    "typescript": "^5.2.2",
+    "vite": "^4.4.9",
+    "vitepress": "1.0.0-rc.12"
+  },
+  "peerDependencies": {
+    "vite": "^4.0.0",
+    "vitepress": "^1.0.0"
+  },
+  "packageManager": "pnpm@8.6.5"
+}
