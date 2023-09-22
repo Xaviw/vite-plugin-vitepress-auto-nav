@@ -35,42 +35,43 @@ interface Options {
   /**
    * glob 匹配表达式
    * 会匹配 srcDir 目录下，除 srcExclude 配置外的，满足表达式的 md 文件
-   * 默认：**/*.md
+   * 默认：**.md
    */
-  pattern?: string | string[]
+  pattern?: string | string[];
   /**
    * 对特定文件或文件夹进行配置
    * 键名为文件、文件夹名或路径（名称存在重复时，可以用路径区分，md 扩展名可以省略）
    */
-  settings?: PluginSettings
+  itemsSetting?: Record<string, ItemOption>;
   /**
    * 自定义排序方法，同级文件、文件夹会调用这个函数进行排序
    * 默认会先按照 sort 权重降序排列，再按照创建时间升序排列
    */
-  compareFn?: (a: FileInfo, b: FileInfo) => number
+  compareFn?: (a: FileInfo, b: FileInfo) => number;
 }
 
 /** 单个文件、文件夹配置项 */
-interface PluginSettings {
-  /*
-  * hide：是否展示
-  * sort：排序权重，权重越大越靠前
-  * title：重新定义展示名称
-  * collapsed: 同 sidebar 中的配置，默认为 false（支持折叠，默认展开）
-  */
-  [key: string]: Pick<FileInfo, 'hide' | 'sort' | 'title'> & { collapsed?: boolean }
+interface ItemOption {
+  /** 是否展示 */
+  hide?: boolean;
+  /** 排序权重，权重越大越靠前 */
+  sort?: number;
+  /** 重定义展示名称 */
+  title?: string;
+  /** 同 sidebar 中的配置，默认 false（支持折叠，默认展开） */
+  collapsed?: boolean;
 }
 
-interface FileInfo {
-  name: string
-  isFolder: boolean
-  createTime: number
-  updateTime: number
-  hide?: boolean
-  sort?: number
-  title?: string
-  collapsed?: boolean
-  children: FileInfo[]
+interface FileInfo extends ItemOption {
+  /** 文件、文件夹名 */
+  name: string;
+  /** 是否是文件夹 */
+  isFolder: boolean;
+  /** 本地文件创建时间 */
+  createTime: number;
+  /** 本地文件更新时间 */
+  updateTime: number;
+  children: FileInfo[];
 }
 ```
 
@@ -84,11 +85,11 @@ vite: {
     AutoNav({
       pattern: ["**/!(README|TODO).md"], // 也可以在这里排除不展示的文件，例如不匹配 README 和 TODO 文件
       settings: {
-        a: { hide: true }, // a.md 不显示在目录中
-        b: { title: 'bb' }, // 可以重新定义目录中的展示名
-        c/c1: { sort : 9 }, // 名称相同时可以用路径精确匹配
-        c2: { sort : 8 }, // 自定义排序权重，c2 会显示在 c1 后面，显示在未定义 sort 的文件前面
-        d: { collapsed: 'cc' }, // 定义文件夹折叠配置
+        a: { hide: true }, // 不显示 a 文件夹 或 a.md
+        b: { title: 'bb' }, // 可以重新定义展示名
+        c/b: { sort : 9 }, // 文件名相同时可以用路径精确匹配
+        c/b2: { sort : 8 }, // 自定义排序权重，b2 会显示在 b1 后面，显示在未定义 sort 的文件前面
+        d: { collapsed: true }, // 文件夹折叠配置
       },
       compareFn: (a, b) => {
         // 按修改时间升序排列
