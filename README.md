@@ -40,7 +40,7 @@ interface Options {
   pattern?: string | string[];
   /**
    * 对特定文件或文件夹进行配置
-   * 键名为文件、文件夹名或路径（名称存在重复时，可以用路径区分，md 扩展名可以省略）
+   * 键名为文件、文件夹名或路径（会从外层文件夹往里进行查找，md 扩展名可以省略；名称存在重复时，可以用路径区分）
    */
   itemsSetting?: Record<string, ItemOption>;
   /**
@@ -67,9 +67,9 @@ interface FileInfo extends ItemOption {
   name: string;
   /** 是否是文件夹 */
   isFolder: boolean;
-  /** 本地文件创建时间 */
+  /** 文件首次提交时间或本地文件创建时间 */
   createTime: number;
-  /** 本地文件更新时间 */
+  /** 文件最新提交时间或本地文件更新时间 */
   updateTime: number;
   children: FileInfo[];
 }
@@ -85,14 +85,14 @@ vite: {
     AutoNav({
       pattern: ["**/!(README|TODO).md"], // 也可以在这里排除不展示的文件，例如不匹配 README 和 TODO 文件
       settings: {
-        a: { hide: true }, // 不显示 a 文件夹 或 a.md
-        b: { title: 'bb' }, // 可以重新定义展示名
-        c/b: { sort : 9 }, // 文件名相同时可以用路径精确匹配
+        a: { hide: true }, // 不显示名称为 a 的文件夹或 md 文件
+        b: { title: 'bb' }, // 名称为 b 的文件夹或文件在菜单中显示为 bb
+        c/b: { sort : 9 }, // 通过路径精确匹配 c 文件夹下的 b 进行配置
         c/b2: { sort : 8 }, // 自定义排序权重，b2 会显示在 b1 后面，显示在未定义 sort 的文件前面
         d: { collapsed: true }, // 文件夹折叠配置
       },
       compareFn: (a, b) => {
-        // 按修改时间升序排列
+        // 按最新提交时间(没有提交记录时为本地文件修改时间)升序排列
         return b.updateTime - a.updateTime
       }
     }),

@@ -15,7 +15,7 @@ interface Options {
   pattern?: string | string[];
   /**
    * 对特定文件或文件夹进行配置
-   * 键名为文件、文件夹名或路径（名称存在重复时，可以用路径区分，md 扩展名可以省略）
+   * 键名为文件、文件夹名或路径（会从外层文件夹往里进行查找，md 扩展名可以省略；名称存在重复时，可以用路径区分）
    */
   itemsSetting?: Record<string, ItemOption>;
   /**
@@ -42,14 +42,14 @@ interface FileInfo extends ItemOption {
   name: string;
   /** 是否是文件夹 */
   isFolder: boolean;
-  /** 本地文件创建时间 */
+  /** 文件首次提交时间或本地文件创建时间 */
   createTime: number;
-  /** 本地文件更新时间 */
+  /** 文件最新提交时间或本地文件更新时间 */
   updateTime: number;
   children: FileInfo[];
 }
 
-export default function (options: Options = {}): Plugin {
+export default function AutoNav(options: Options = {}): Plugin {
   return {
     name: "vite-plugin-vitepress-auto-nav",
     // md 文件增删时，通过触发配置文件修改操作，实现热更新功能
