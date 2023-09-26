@@ -1,4 +1,5 @@
 import { sep, normalize, join } from "node:path";
+import { spawn } from "child_process";
 import glob from "fast-glob";
 import fs from "fs-extra";
 import type { ResolvedConfig, ViteDevServer, Plugin, UserConfig } from "vite";
@@ -99,7 +100,7 @@ export default function (options: Options = {}): Plugin {
         .sort();
 
       // 处理文件路径数组为多级结构化数据
-      const data = serializationPaths(paths, options, srcDir);
+      const data = await serializationPaths(paths, options, srcDir);
 
       // 数据排序
       sortStructuredData(data, options.compareFn);
@@ -122,7 +123,7 @@ export default function (options: Options = {}): Plugin {
 /**
  * 处理文件路径字符串数组
  */
-function serializationPaths(
+async function serializationPaths(
   paths: string[],
   { itemsSetting = {} }: Options = {},
   srcDir: string
@@ -147,8 +148,7 @@ function serializationPaths(
       currentPath = join(currentPath, name);
 
       // 获取时间戳
-      const { birthtimeMs: createTime, ctimeMs: updateTime } =
-        fs.statSync(currentPath);
+      const [createTime, updateTime] = await getTimestamp(currentPath);
 
       // 简单判断是否是文件
       const isFolder = !name.includes(".");
@@ -235,7 +235,7 @@ function getFirstArticleFromFolder(data: FileInfo, path = "") {
   if (data.children.length > 0) {
     return getFirstArticleFromFolder(data.children[0], path);
   } else {
-    return path;
+    return path.replace(".md", "");
   }
 }
 
@@ -269,4 +269,50 @@ function generateSidebar(structuredData: FileInfo[]): DefaultTheme.Sidebar {
   }
 
   return sidebar;
+}
+
+/**
+ * 获取文件提交时间
+ */
+function getTimestamp(filePath: string) {
+  return new Promise<[number, number]>((resolve) => {
+    let output: number[] = [];
+
+    // 开启子进程执行git log命令
+    const child = spawn("git", [
+      "--no-pager",
+      "log",
+      '--pretty="%ci"',
+      filePath,
+    ]);
+
+    // 监听输出流
+    child.stdout.on("data", (d) => {
+      const data = String(d)
+        .split("\n")
+        .map((item) => +new Date(item))
+        .filter((item) => item);
+      output.push(...data);
+    });
+
+    // 输出接受后返回
+    child.on("close", () => {
+      if (output.length) {
+        // 返回[发布时间，最近更新时间]
+        resolve([+new Date(output[output.length - 1]), +new Date(output[0])]);
+      } else {
+        // 没有提交记录时获取文件时间
+        const { birthtimeMs: createTime, ctimeMs: updateTime } =
+          fs.statSync(filePath);
+        resolve([createTime, updateTime]);
+      }
+    });
+
+    child.on("error", () => {
+      // 获取失败时使用文件时间
+      const { birthtimeMs: createTime, ctimeMs: updateTime } =
+        fs.statSync(filePath);
+      resolve([createTime, updateTime]);
+    });
+  });
 }
