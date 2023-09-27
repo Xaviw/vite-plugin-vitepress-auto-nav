@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-vitepress-auto-nav",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "自动生成vitepress的nav与sidebar",
   "keywords": [
     "vite-plugin",
@@ -25,6 +25,9 @@
       "import": "./dist/index.mjs"
     }
   },
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "files": [
     "dist"
   ],
