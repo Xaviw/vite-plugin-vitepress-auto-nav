@@ -1,7 +1,7 @@
 import { sep, normalize, join } from "node:path";
 import { spawn } from "child_process";
 import glob from "fast-glob";
-import fs from "fs-extra";
+import { utimesSync, statSync } from "node:fs";
 import type { ResolvedConfig, ViteDevServer, Plugin, UserConfig } from "vite";
 import type { DefaultTheme, SiteConfig } from "vitepress";
 
@@ -62,10 +62,12 @@ export default function AutoNav(options: Options = {}): Plugin {
       const $configPath =
         configPath?.match(/(\.vitepress.*)/)?.[1] || ".vitepress/config.ts";
 
+      // VitePress 中已经添加了对所有 md 文件的监听，这里只需要处理事件
       watcher.on("all", (event, path) => {
-        // 开发服务器默认监听了所有文件，过滤掉 change 事件和非 md 文件操作
+        // 过滤掉 change 事件和非 md 文件操作
         if (event === "change" || !path.endsWith(".md")) return;
-        fs.utimesSync($configPath, new Date(), new Date());
+        // 修改配置文件系统时间戳，触发更新
+        utimesSync($configPath, new Date(), new Date());
       });
     },
     async config(config) {
@@ -95,9 +97,7 @@ export default function AutoNav(options: Options = {}): Plugin {
             ...srcExclude,
           ],
         })
-      )
-        .map((path) => normalize(path))
-        .sort();
+      ).map((path) => normalize(path));
 
       // 处理文件路径数组为多级结构化数据
       const data = await serializationPaths(paths, options, srcDir);
@@ -120,9 +120,7 @@ export default function AutoNav(options: Options = {}): Plugin {
   };
 }
 
-/**
- * 处理文件路径字符串数组
- */
+/** 处理文件路径字符串数组 */
 async function serializationPaths(
   paths: string[],
   { itemsSetting = {} }: Options = {},
@@ -137,26 +135,29 @@ async function serializationPaths(
 
   const root: FileInfo[] = [];
 
+  // 遍历处理每一条文章路径
   for (const path of paths) {
+    // 记录当前处理文件、文件夹的父级
+    let currentNode = root;
+    // 记录当前处理文件、文件夹的路径
+    let currentPath = "";
+
     // 获取路径中的每一级名称
     const pathParts = join(srcDir, path).split(sep);
-
-    let currentNode = root;
-    let currentPath = "";
 
     for (const name of pathParts) {
       currentPath = join(currentPath, name);
 
-      // 获取时间戳
+      // 获取文章时间戳信息
       const [createTime, updateTime] = await getTimestamp(currentPath);
 
-      // 简单判断是否是文件
+      // 通过是否有扩展名判断是文件还是文件夹
       const isFolder = !name.includes(".");
 
       // 查找是否有自定义配置
       // 先按路径匹配
       let customInfoKey = pathKeys.find((p) => currentPath === p);
-      // 再按文件名匹配（仅传入文件、文件夹名时）
+      // 再按文件名匹配
       if (!customInfoKey) {
         customInfoKey = pathKeys.find(
           (p) => name === p || name.replace(".md", "") === p
@@ -167,8 +168,10 @@ async function serializationPaths(
       // 跳过不展示的部分
       if (customInfo.hide) break;
 
+      // 查找该层级中是否已经处理过这个文件或文件夹
       let childNode = currentNode.find((node) => node.name === name);
 
+      // 若未处理过，整理数据并添加到数组
       if (!childNode) {
         childNode = {
           ...customInfo,
@@ -187,28 +190,12 @@ async function serializationPaths(
   return root;
 }
 
-/**
- * 对结构化后的多级数组数据进行逐级排序
- * 优先按 sort 排序，其次时间戳排序，navSort 始终优先于时间戳
- */
+/** 对结构化后的多级数组数据进行逐级排序 */
 function sortStructuredData(
   data: FileInfo[],
   compareFn?: (a: FileInfo, b: FileInfo) => number
 ): FileInfo[] {
-  if (typeof compareFn !== "function") {
-    compareFn = (a, b) => {
-      if (a.sort !== undefined && b.sort !== undefined) {
-        return b.sort - a.sort;
-      } else if (a.sort !== undefined) {
-        return -1;
-      } else if (b.sort !== undefined) {
-        return 1;
-      } else {
-        return a.createTime - b.createTime;
-      }
-    };
-  }
-  return data.sort(compareFn).map((item) => {
+  return data.sort(compareFn || defaultCompareFn).map((item) => {
     if (item.children && item.children.length > 0) {
       item.children = sortStructuredData(item.children, compareFn);
     }
@@ -216,9 +203,21 @@ function sortStructuredData(
   });
 }
 
-/**
- * 生成 nav 数据
- */
+/** 默认排序方法，优先按 sort 权重降序，其次按创建时间升序 */
+function defaultCompareFn(a: FileInfo, b: FileInfo) {
+  if (a.sort !== undefined && b.sort !== undefined) {
+    // 权重相同时按创建时间升序排列
+    return b.sort - a.sort || a.createTime - b.createTime;
+  } else if (a.sort !== undefined) {
+    return -1;
+  } else if (b.sort !== undefined) {
+    return 1;
+  } else {
+    return a.createTime - b.createTime;
+  }
+}
+
+/** 生成 nav 数据 */
 function generateNav(structuredData: FileInfo[]) {
   return structuredData.map((item) => ({
     text: item.title || item.name,
@@ -227,24 +226,22 @@ function generateNav(structuredData: FileInfo[]) {
   }));
 }
 
-/**
- * 获取首层目录中第一篇文章
- */
+/** 获取首层目录中第一篇文章 */
 function getFirstArticleFromFolder(data: FileInfo, path = "") {
   path += `/${data.name}`;
   if (data.children.length > 0) {
     return getFirstArticleFromFolder(data.children[0], path);
   } else {
+    // 显示名称应除掉扩展名
     return path.replace(".md", "");
   }
 }
 
-/**
- * 生成 sidebar
- */
+/** 生成 sidebar */
 function generateSidebar(structuredData: FileInfo[]): DefaultTheme.Sidebar {
   const sidebar: DefaultTheme.Sidebar = {};
 
+  // 遍历首层目录（nav），递归生成对应的 sidebar
   for (const { name, children } of structuredData) {
     sidebar[`/${name}/`] = traverseSubFile(children, `/${name}`);
   }
@@ -302,17 +299,15 @@ function getTimestamp(filePath: string) {
         resolve([+new Date(output[output.length - 1]), +new Date(output[0])]);
       } else {
         // 没有提交记录时获取文件时间
-        const { birthtimeMs: createTime, ctimeMs: updateTime } =
-          fs.statSync(filePath);
-        resolve([createTime, updateTime]);
+        const { birthtimeMs, ctimeMs } = statSync(filePath);
+        resolve([birthtimeMs, ctimeMs]);
       }
     });
 
     child.on("error", () => {
       // 获取失败时使用文件时间
-      const { birthtimeMs: createTime, ctimeMs: updateTime } =
-        fs.statSync(filePath);
-      resolve([createTime, updateTime]);
+      const { birthtimeMs, ctimeMs } = statSync(filePath);
+      resolve([birthtimeMs, ctimeMs]);
     });
   });
 }
