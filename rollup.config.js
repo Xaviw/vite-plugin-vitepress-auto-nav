@@ -8,4 +8,5 @@ export default {
     format: "esm",
   },
   plugins: [typescript(), terser()],
+  external: ["fast-glob", "path", "child_process", "fs"],
 };

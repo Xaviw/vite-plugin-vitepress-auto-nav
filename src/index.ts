@@ -1,7 +1,8 @@
-import { sep, normalize, join } from "node:path";
+import { sep, normalize, join } from "path";
+import { utimesSync, statSync } from "fs";
 import { spawn } from "child_process";
 import glob from "fast-glob";
-import { utimesSync, statSync } from "node:fs";
+
 import type { ResolvedConfig, ViteDevServer, Plugin, UserConfig } from "vite";
 import type { DefaultTheme, SiteConfig } from "vitepress";
 
