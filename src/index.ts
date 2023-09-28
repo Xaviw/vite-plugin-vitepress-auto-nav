@@ -10,17 +10,21 @@ import type { DefaultTheme, SiteConfig } from "vitepress";
 interface Options {
   /**
    * glob 匹配表达式
+   * 
    * 会匹配 srcDir 目录下，除 srcExclude 配置外的，满足表达式的 md 文件
+   * 
    * 默认：**.md
    */
   pattern?: string | string[];
   /**
    * 对特定文件或文件夹进行配置
+   * 
    * 键名为文件、文件夹名或路径（会从外层文件夹往里进行查找，md 扩展名可以省略；名称存在重复时，可以用路径区分）
    */
   itemsSetting?: Record<string, ItemOption>;
   /**
    * 自定义排序方法，同级文件、文件夹会调用这个函数进行排序
+   * 
    * 默认会先按照 sort 权重降序排列，再按照创建时间升序排列
    */
   compareFn?: (a: FileInfo, b: FileInfo) => number;

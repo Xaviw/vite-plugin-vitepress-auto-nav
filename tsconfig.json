@@ -7,7 +7,6 @@
     "lib": [ "ESNext" ],
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
-    "removeComments": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
