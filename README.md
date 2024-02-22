@@ -11,10 +11,10 @@
 pnpm i vite-plugin-vitepress-auto-nav -D
 ```
 
-添加插件到 `.vitepress/config.ts`
+添加插件到 `.vitepress/config.ts`，如果添加后报 TS 类型错误请安装 vite
 
 ```ts
-import AutoNav from 'vite-plugin-vitepress-auto-nav'
+import AutoNav from "vite-plugin-vitepress-auto-nav";
 
 export default defineConfig({
   vite: {
@@ -24,7 +24,7 @@ export default defineConfig({
       }),
     ],
   },
-})
+});
 ```
 
 ## 🛠️ 配置项
