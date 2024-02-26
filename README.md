@@ -45,7 +45,7 @@ interface Options {
   itemsSetting?: Record<string, ItemOption>;
   /**
    * 自定义排序方法，同级文件、文件夹会调用这个函数进行排序
-   * 默认会先按照 sort 权重降序排列，再按照创建时间升序排列
+   * 默认会先按照 sort 权重降序排列，再按照创建时间升序排列，sort>0时权重高于未定义sort的文章，sort<0时权重低于未定义sort的文章
    */
   compareFn?: (a: FileInfo, b: FileInfo) => number;
   /**
@@ -95,15 +95,15 @@ vite: {
       settings: {
         a: { hide: true }, // 不显示名称为 a 的文件夹或 md 文件
         b: { title: 'bb' }, // 名称为 b 的文件夹或文件在菜单中显示为 bb
-        c/b: { sort : 9, useArticleTitle: true }, // 通过路径精确匹配 c 文件夹下的 b 进行配置；并使用文章一级标题作为文章名称
-        c/b2: { sort : 8 }, // 自定义排序权重，b2 会显示在 b1 后面，显示在未定义 sort 的文件前面
+        c/b: { sort : 9 }, // 通过路径精确匹配 c 文件夹下的 b 进行配置，优先级高于未定义 sort 的文章和 sort < 9 的文章
+        c/b2: { sort : -1, useArticleTitle: false }, // 自定义排序权重，优先级低于未定义 sort 的文章和 sort > -1 的文章；关闭使用文章一级标题作为文章名称
         d: { collapsed: true }, // 文件夹折叠配置
       },
       compareFn: (a, b) => {
         // 按最新提交时间(没有提交记录时为本地文件修改时间)升序排列
         return b.updateTime - a.updateTime
       },
-      useArticleTitle: false // 关闭使用文章一级标题作为文章名称
+      useArticleTitle: true // 开启使用文章一级标题作为文章名称
     }),
   ],
 }

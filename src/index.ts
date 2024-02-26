@@ -33,7 +33,7 @@ interface Options {
   /**
    * 是否使用文章中的一级标题代替文件名作为文章名称（处理文件名可能是简写的情况），也可以单独配置
    *
-   * 默认：true
+   * 默认：false
    */
   useArticleTitle?: boolean;
 }
@@ -235,16 +235,25 @@ function sortStructuredData(
   });
 }
 
-/** 默认排序方法，优先按 sort 权重降序，其次按创建时间升序 */
+/**
+ * 默认排序方法
+ *
+ * 优先按 sort 权重降序，其次按创建时间升序
+ *
+ * sort 值大于0时优先级高于未定义 sort 的文章，小于0时优先级低于未定义 sort 的文章
+ */
 function defaultCompareFn(a: FileInfo, b: FileInfo) {
   if (a.sort !== undefined && b.sort !== undefined) {
     // 权重相同时按创建时间升序排列
     return b.sort - a.sort || a.createTime - b.createTime;
-  } else if (a.sort !== undefined) {
-    return -1;
-  } else if (b.sort !== undefined) {
-    return 1;
+  } else if (a.sort) {
+    // a.sort > 0 保持不变，否则交换
+    return -a.sort;
+  } else if (b.sort) {
+    // b.sort > 0 交换，否则保持不变
+    return -b.sort;
   } else {
+    // 没有sort，按时间升序
     return a.createTime - b.createTime;
   }
 }
