@@ -1,7 +1,9 @@
 import { sep, normalize, join } from "path";
 import { utimesSync, statSync } from "fs";
+import { readFile } from "fs/promises";
 import { spawn } from "child_process";
 import glob from "fast-glob";
+import matter from "gray-matter";
 
 import type { ResolvedConfig, ViteDevServer, Plugin, UserConfig } from "vite";
 import type { DefaultTheme, SiteConfig } from "vitepress";
@@ -10,24 +12,30 @@ import type { DefaultTheme, SiteConfig } from "vitepress";
 interface Options {
   /**
    * glob 匹配表达式
-   * 
+   *
    * 会匹配 srcDir 目录下，除 srcExclude 配置外的，满足表达式的 md 文件
-   * 
+   *
    * 默认：**.md
    */
   pattern?: string | string[];
   /**
    * 对特定文件或文件夹进行配置
-   * 
+   *
    * 键名为文件、文件夹名或路径（会从外层文件夹往里进行查找，md 扩展名可以省略；名称存在重复时，可以用路径区分）
    */
   itemsSetting?: Record<string, ItemOption>;
   /**
    * 自定义排序方法，同级文件、文件夹会调用这个函数进行排序
-   * 
+   *
    * 默认会先按照 sort 权重降序排列，再按照创建时间升序排列
    */
   compareFn?: (a: FileInfo, b: FileInfo) => number;
+  /**
+   * 是否使用文章中的一级标题代替文件名作为文章名称（处理文件名可能是简写的情况），也可以单独配置
+   *
+   * 默认：true
+   */
+  useArticleTitle?: boolean;
 }
 
 /** 单个文件、文件夹配置项 */
@@ -40,6 +48,8 @@ interface ItemOption {
   title?: string;
   /** 同 sidebar 中的配置，默认 false（支持折叠，默认展开） */
   collapsed?: boolean;
+  /** 是否使用文章中的一级标题代替文件名作为文章名称，会覆盖全局 useArticleTitle 配置 */
+  useArticleTitle?: boolean;
 }
 
 interface FileInfo extends ItemOption {
@@ -128,7 +138,7 @@ export default function AutoNav(options: Options = {}): Plugin {
 /** 处理文件路径字符串数组 */
 async function serializationPaths(
   paths: string[],
-  { itemsSetting = {} }: Options = {},
+  { itemsSetting = {}, useArticleTitle }: Options,
   srcDir: string
 ) {
   // 统一路径格式，便于匹配
@@ -153,7 +163,7 @@ async function serializationPaths(
     for (const name of pathParts) {
       currentPath = join(currentPath, name);
 
-      // 获取文章时间戳信息
+      // 获取git提交或文件船舰时间戳信息
       const [createTime, updateTime] = await getTimestamp(currentPath);
 
       // 通过是否有扩展名判断是文件还是文件夹
@@ -178,9 +188,26 @@ async function serializationPaths(
 
       // 若未处理过，整理数据并添加到数组
       if (!childNode) {
+        // 处理文件名与文字一级标题不一致的情况
+        let realName = name;
+        // 是文字且需要使用文章一级标题作为文章名称
+        if (!isFolder && (customInfo.useArticleTitle || useArticleTitle)) {
+          // 解析文章信息
+          const file = await readFile(currentPath, { encoding: "utf-8" });
+          const { content, data } = matter(file);
+          // 提取页面一级标题
+          let title = content.match(/^\s*#\s+(.*)[\n\r][\s\S]*/)?.[1];
+          // 标题可能用到了变量，需要替换
+          const matterTitle = title?.match(/\{\{\$frontmatter\.(\S+)\}\}/)?.[1];
+          if (matterTitle) {
+            title = data[matterTitle];
+          }
+          title && (realName = title);
+        }
+
         childNode = {
           ...customInfo,
-          name,
+          name: realName,
           isFolder,
           createTime,
           updateTime,

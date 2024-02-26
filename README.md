@@ -48,6 +48,12 @@ interface Options {
    * 默认会先按照 sort 权重降序排列，再按照创建时间升序排列
    */
   compareFn?: (a: FileInfo, b: FileInfo) => number;
+  /**
+   * 是否使用文章中的一级标题代替文件名作为文章名称（处理文件名可能是简写的情况），也可以单独配置
+   *
+   * 默认：true
+   */
+  useArticleTitle?: boolean;
 }
 
 /** 单个文件、文件夹配置项 */
@@ -60,6 +66,8 @@ interface ItemOption {
   title?: string;
   /** 同 sidebar 中的配置，默认 false（支持折叠，默认展开） */
   collapsed?: boolean;
+  /** 是否使用文章中的一级标题代替文件名作为文章名称，会覆盖全局 useArticleTitle 配置 */
+  useArticleTitle?: boolean;
 }
 
 interface FileInfo extends ItemOption {
@@ -87,14 +95,15 @@ vite: {
       settings: {
         a: { hide: true }, // 不显示名称为 a 的文件夹或 md 文件
         b: { title: 'bb' }, // 名称为 b 的文件夹或文件在菜单中显示为 bb
-        c/b: { sort : 9 }, // 通过路径精确匹配 c 文件夹下的 b 进行配置
+        c/b: { sort : 9, useArticleTitle: true }, // 通过路径精确匹配 c 文件夹下的 b 进行配置；并使用文章一级标题作为文章名称
         c/b2: { sort : 8 }, // 自定义排序权重，b2 会显示在 b1 后面，显示在未定义 sort 的文件前面
         d: { collapsed: true }, // 文件夹折叠配置
       },
       compareFn: (a, b) => {
         // 按最新提交时间(没有提交记录时为本地文件修改时间)升序排列
         return b.updateTime - a.updateTime
-      }
+      },
+      useArticleTitle: false // 关闭使用文章一级标题作为文章名称
     }),
   ],
 }
