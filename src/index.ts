@@ -13,7 +13,7 @@ interface Options {
   /**
    * glob 匹配表达式
    *
-   * 会匹配 srcDir 目录下，除 srcExclude 配置外的，满足表达式的 md 文件
+   * 会匹配 srcDir 目录下，除 srcExclude 配置外满足表达式的 md 文件
    *
    * 默认：**.md
    */
@@ -21,38 +21,51 @@ interface Options {
   /**
    * 对特定文件或文件夹进行配置
    *
-   * 键名为文件、文件夹名或路径（会从外层文件夹往里进行查找，md 扩展名可以省略；名称存在重复时，可以用路径区分）
+   * 键名为文件名、文件夹名或路径（会从外层文件夹往里进行查找，md 扩展名可以省略；名称存在重复时，用路径区分）
+   *
+   * 文章的配置也可以写在 frontmatter 中，使用系统属性名或`nav-属性名`。优先级高于 itemsSetting 配置
    */
-  itemsSetting?: Record<string, ItemOption>;
+  itemsSetting?: Record<string, ItemOptions>;
   /**
    * 自定义排序方法，同级文件、文件夹会调用这个函数进行排序
    *
-   * 默认会先按照 sort 权重降序排列，再按照创建时间升序排列
+   * 默认排序方法 defaultCompareFn 规则为：
+   *
+   * 1. 都有sort值时，先按sort值升序排列再按创建时间升序排列
+   * 2. 只有一个有sort值，且sort值等于另一个的下标值时，有sort值的在前
+   * 3. 只有一个有sort值，且sort值不等于另一个的下标值时，对比sort值与下标值，升序排列
+   * 4. 都没有sort值时，对比创建时间顺序排列
    */
   compareFn?: (a: FileInfo, b: FileInfo) => number;
-  /**
-   * 是否使用文章中的一级标题代替文件名作为文章名称（处理文件名可能是简写的情况），也可以单独配置
-   *
-   * 默认：false
-   */
+  /** 是否使用文章中的一级标题代替文件名作为文章名称（处理文件名可能是简写的情况），也可以在 itemsSetting 中单独配置 */
   useArticleTitle?: boolean;
 }
 
-/** 单个文件、文件夹配置项 */
-interface ItemOption {
-  /** 是否展示 */
+/**
+ * 单个文件、文件夹配置项
+ *
+ * 也支持在文章的 frontmatter 中配置同名属性或 `nav-属性名`，优先级高于 itemsSetting 中的配置
+ */
+interface ItemOptions {
+  /** 是否显示 */
   hide?: boolean;
-  /** 排序权重，权重越大越靠前 */
+  /** 排序值（目标位置下标，从0开始） */
   sort?: number;
   /** 重定义展示名称 */
   title?: string;
-  /** 同 sidebar 中的配置，默认 false（支持折叠，默认展开） */
-  collapsed?: boolean;
-  /** 是否使用文章中的一级标题代替文件名作为文章名称，会覆盖全局 useArticleTitle 配置 */
+  /** 是否使用文章中的一级标题代替文件名作为文章名称，优于全局 useArticleTitle 配置 */
   useArticleTitle?: boolean;
+  /**
+   * 同 sidebar 中的配置，只对文件夹生效
+   *
+   * 默认：false（支持折叠，默认展开）
+   */
+  collapsed?: boolean;
 }
 
-interface FileInfo extends ItemOption {
+interface FileInfo {
+  /** 同级中的位置下标 */
+  index: number;
   /** 文件、文件夹名 */
   name: string;
   /** 是否是文件夹 */
@@ -61,6 +74,9 @@ interface FileInfo extends ItemOption {
   createTime: number;
   /** 文件最新提交时间或本地文件更新时间 */
   updateTime: number;
+  /** 配置对象：`{ ...itemSetting, ...frontmatter }` */
+  options: ItemOptions & Record<string, any>;
+  /** 子文件、文件夹 */
   children: FileInfo[];
 }
 
@@ -151,7 +167,7 @@ async function serializationPaths(
   const root: FileInfo[] = [];
 
   // 遍历处理每一条文章路径
-  for (const path of paths) {
+  for (const [index, path] of paths.entries()) {
     // 记录当前处理文件、文件夹的父级
     let currentNode = root;
     // 记录当前处理文件、文件夹的路径
@@ -163,13 +179,16 @@ async function serializationPaths(
     for (const name of pathParts) {
       currentPath = join(currentPath, name);
 
-      // 获取git提交或文件船舰时间戳信息
+      // 获取git提交或文件创建时间戳信息
       const [createTime, updateTime] = await getTimestamp(currentPath);
 
       // 通过是否有扩展名判断是文件还是文件夹
       const isFolder = !name.includes(".");
 
-      // 查找是否有自定义配置
+      // 记录自定义配置
+      let customOptions: ItemOptions & Record<string, any> = {};
+
+      // 查找itemsSetting是否有自定义配置
       // 先按路径匹配
       let customInfoKey = pathKeys.find((p) => currentPath === p);
       // 再按文件名匹配
@@ -178,40 +197,50 @@ async function serializationPaths(
           (p) => name === p || name.replace(".md", "") === p
         );
       }
-      const customInfo = customInfoKey ? itemsSetting[customInfoKey] : {};
+      if (customInfoKey) {
+        customOptions = { ...itemsSetting[customInfoKey] };
+      }
+
+      // 处理文件名与文字一级标题不一致的情况
+      let realName = name;
+      // 是文章时解析文章信息
+      if (!isFolder) {
+        const file = await readFile(currentPath, { encoding: "utf-8" });
+        const { content, data } = matter(file);
+        // 合并文章配置和frontmatter
+        customOptions = { ...customOptions, ...data };
+        // 提取页面一级标题
+        let title = content.match(/^\s*#\s+(.*)[\n\r][\s\S]*/)?.[1];
+        // 标题可能用到了变量，需要替换
+        const matterTitle = title?.match(/\{\{\$frontmatter\.(\S+)\}\}/)?.[1];
+        title = matterTitle ? data[matterTitle] : undefined;
+        // frontmatter title 存在且需要替换时
+        if (
+          title &&
+          (customOptions["nav-useArticleTitle"] ||
+            customOptions.useArticleTitle ||
+            useArticleTitle)
+        ) {
+          realName = title;
+        }
+      }
 
       // 跳过不展示的部分
-      if (customInfo.hide) break;
+      if (customOptions.hide) break;
 
       // 查找该层级中是否已经处理过这个文件或文件夹
       let childNode = currentNode.find((node) => node.name === name);
 
       // 若未处理过，整理数据并添加到数组
       if (!childNode) {
-        // 处理文件名与文字一级标题不一致的情况
-        let realName = name;
-        // 是文字且需要使用文章一级标题作为文章名称
-        if (!isFolder && (customInfo.useArticleTitle || useArticleTitle)) {
-          // 解析文章信息
-          const file = await readFile(currentPath, { encoding: "utf-8" });
-          const { content, data } = matter(file);
-          // 提取页面一级标题
-          let title = content.match(/^\s*#\s+(.*)[\n\r][\s\S]*/)?.[1];
-          // 标题可能用到了变量，需要替换
-          const matterTitle = title?.match(/\{\{\$frontmatter\.(\S+)\}\}/)?.[1];
-          if (matterTitle) {
-            title = data[matterTitle];
-          }
-          title && (realName = title);
-        }
-
         childNode = {
-          ...customInfo,
+          index,
           name: realName,
           isFolder,
           createTime,
           updateTime,
           children: [],
+          options: customOptions,
         };
         currentNode.push(childNode);
       }
@@ -235,25 +264,26 @@ function sortStructuredData(
   });
 }
 
-/**
- * 默认排序方法
- *
- * 优先按 sort 权重降序，其次按创建时间升序
- *
- * sort 值大于0时优先级高于未定义 sort 的文章，小于0时优先级低于未定义 sort 的文章
- */
+/** 默认排序方法 */
 function defaultCompareFn(a: FileInfo, b: FileInfo) {
-  if (a.sort !== undefined && b.sort !== undefined) {
-    // 权重相同时按创建时间升序排列
-    return b.sort - a.sort || a.createTime - b.createTime;
-  } else if (a.sort) {
-    // a.sort > 0 保持不变，否则交换
-    return -a.sort;
-  } else if (b.sort) {
-    // b.sort > 0 交换，否则保持不变
-    return -b.sort;
+  const sortA = a.options["nav-sort"] || a.options.sort;
+  const sortB = b.options["nav-sort"] || b.options.sort;
+
+  if (sortA !== undefined && sortB !== undefined) {
+    // 均存在sort，先sort升序排列，再createTime升序排列
+    return sortA - sortB || a.createTime - b.createTime;
+  } else if (sortA !== undefined && sortB === undefined) {
+    // 只有a有sort
+    // a.sort === b.index时a在前
+    // 否则对比 a.sort 和 b.index，升序排列
+    return sortA === b.index ? -1 : sortA - b.index;
+  } else if (sortA === undefined && sortB !== undefined) {
+    // 只有b有sort
+    // b.sort === a.index时 b 在前
+    // 否则对比 b.sort 和 a.index，升序排列
+    return sortB === a.index ? 1 : a.index - sortB;
   } else {
-    // 没有sort，按时间升序
+    // 均不存在sort，创建时间升序排列
     return a.createTime - b.createTime;
   }
 }
@@ -261,7 +291,7 @@ function defaultCompareFn(a: FileInfo, b: FileInfo) {
 /** 生成 nav 数据 */
 function generateNav(structuredData: FileInfo[]) {
   return structuredData.map((item) => ({
-    text: item.title || item.name,
+    text: item.options.title || item.name,
     activeMatch: `/${item.name}/`,
     link: getFirstArticleFromFolder(item),
   }));
@@ -293,11 +323,15 @@ function generateSidebar(structuredData: FileInfo[]): DefaultTheme.Sidebar {
   ): DefaultTheme.SidebarItem[] {
     return subData.map((file) => {
       const filePath = `${parentPath}/${file.name}`;
-      const fileName = file.title || file.name.replace(".md", "");
+      const fileName =
+        file.options["nav-title"] ||
+        file.options.title ||
+        file.name.replace(".md", "");
       if (file.isFolder) {
         return {
           text: fileName,
-          collapsed: file.collapsed ?? false,
+          collapsed:
+            (file.options["nav-collapsed"] || file.options.collapsed) ?? false,
           items: traverseSubFile(file.children, filePath),
         };
       } else {

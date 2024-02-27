@@ -1,6 +1,6 @@
 {
   "name": "vite-plugin-vitepress-auto-nav",
-  "version": "2.1.0",
+  "version": "2.1.2",
   "description": "自动生成vitepress的nav与sidebar",
   "keywords": [
     "vite-plugin",
@@ -39,6 +39,7 @@
     "gray-matter": "^4.0.3"
   },
   "devDependencies": {
+    "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-terser": "^0.4.3",
     "@types/node": "^20.5.9",
     "rollup": "^3.29.1",
