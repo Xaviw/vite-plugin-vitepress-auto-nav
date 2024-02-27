@@ -211,17 +211,15 @@ async function serializationPaths(
         customOptions = { ...customOptions, ...data };
         // 提取页面一级标题
         let title = content.match(/^\s*#\s+(.*)[\n\r][\s\S]*/)?.[1];
-        // 标题可能用到了变量，需要替换
-        const matterTitle = title?.match(/\{\{\$frontmatter\.(\S+)\}\}/)?.[1];
-        title = matterTitle ? data[matterTitle] : undefined;
-        // frontmatter title 存在且需要替换时
         if (
           title &&
           (customOptions["nav-useArticleTitle"] ||
             customOptions.useArticleTitle ||
             useArticleTitle)
         ) {
-          realName = title;
+          // 标题可能用到了变量，需要替换
+          const matterTitle = title.match(/\{\{\$frontmatter\.(\S+)\}\}/)?.[1];
+          realName = (matterTitle && data[matterTitle]) || title;
         }
       }
 
