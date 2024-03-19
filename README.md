@@ -4,13 +4,13 @@
 
 ## ✨ 功能
 
-- 根据 `srcDir` 与 `srcExclude` 配置确定自动读取范围，还支持自定义
-- 将一级文件夹作为 `nav`，将次级文件夹作为 `sidebar` 中的目录，将 `md` 文件作为目录中的文章
+- 支持自定义读取范围（基于 `srcDir` 与 `srcExclude` 配置）
+- 将一级文件夹作为 `nav`，将次级文件夹和文件作为 `sidebar`
 - 支持插件配置与文章 `frontmatter` 配置两种自定义方式
-- 支持自定义生成 `nav` 与 `sidebar` 中的显示名称，文章还支持一级标题作为名称（包括标题使用 `frontmatter` 变量的情况）
-- 默认使用首次 `git` 提交时间升序排列（详细规则见后续），还支持自定义排序方法（相关数据已放入参数）
+- 支持自定义显示名称，文章还支持一级标题作为名称
+- 支持自定义排序方法
 - 支持自定义隐藏文件或文件夹
-- 已存在 `nav` 配置时不再自动生成 `nav`（因为 `nav` 项通常较少，用手动配置代替插件配置较为方便）
+- 修改插件配置或 `frontmatter` 后自动刷新
 
 ## 🕯️ 使用
 
@@ -42,10 +42,11 @@ export default defineConfig({
 
 3. 正常启动项目即可使用
 
-## 🛠️ 配置项
+## 🛠️ 配置
+
+**在文章 `frontmatter` 中也可以配置 `ItemOptions` 中的属性。同时支持配置为 `nav-属性名` 的格式，可以避免与逻辑中的变量重名。对于 `frontmatter` 中其他的变量，也会加入到排序函数参数的 `frontmatter` 属性中**
 
 ```ts
-/** 插件配置项 */
 interface Options {
   /**
    * glob 匹配表达式
@@ -78,17 +79,6 @@ interface Options {
   useArticleTitle?: boolean;
 }
 
-/** 文件、文件夹时间戳信息 */
-interface TimesInfo {
-  /** 本地文件创建时间 */
-  birthTime?: number;
-  /** 本地文件修改时间 */
-  modifyTime?: number;
-  /** git首次提交时间（仅文件） */
-  firstCommitTime?: number;
-  /** git最后一次提交时间（仅文件） */
-  lastCommitTime?: number;
-}
 /**
  * 单个文件、文件夹配置项
  *
@@ -111,9 +101,6 @@ interface ItemOptions {
   collapsed?: boolean;
 }
 
-/** 文件保存的 options 数据 */
-type ItemCacheOptions = ItemOptions & TimesInfo & { h1?: string };
-
 /** 文件、文件夹关键信息 */
 interface Item {
   /** 同级中的位置下标 */
@@ -122,14 +109,36 @@ interface Item {
   name: string;
   /** 是否是文件夹 */
   isFolder: boolean;
-  /** 配置对象，包括 ItemOptions 配置、文章 frontmatter 中的 ItemOptions 配置、时间戳信息、文章内一级标题（h1） */
+  /** 配置对象(不包括frontmatter)，以及时间戳数据(TimesInfo) */
   options: ItemCacheOptions;
+  /** frontmatter 数据以及文章一级标题（h1） */
+  frontmatter: Frontmatter;
   /** 子文件、文件夹 */
   children: Item[];
 }
+
+/** 缓存的 options 数据 */
+type ItemCacheOptions = ItemOptions & TimesInfo;
+
+/** 文件、文件夹时间戳信息 */
+interface TimesInfo {
+  /** 本地文件创建时间 */
+  birthTime?: number;
+  /** 本地文件修改时间 */
+  modifyTime?: number;
+  /** git首次提交时间（仅文件） */
+  firstCommitTime?: number;
+  /** git最后一次提交时间（仅文件） */
+  lastCommitTime?: number;
+}
+
+/** 缓存的 frontmatter 数据 */
+type Frontmatter = { h1?: string } & Recordable;
+
+type Recordable = Record<string, any>;
 ```
 
-> 生成的 `nav` 配置，会使用目录下第一篇文章作为 link 属性，如果需要自定义配置可以直接在 `config` 文件中添加，此时插件将不会修改已存在的 `nav` 配置
+> 生成的 `nav` 配置，会使用目录下第一篇文章作为 `link` 属性。如果需要自定义 `nav` 可以直接手动定义，此时插件将不会修改已存在的 `nav` 配置（因为 `nav` 配置通常较少，手动配置相较于插件中进行复杂的配置性价比更高）
 
 ## 🎊 配置示例
 
@@ -147,9 +156,9 @@ vite: {
       },
       compareFn: (a, b) => {
         // 按最新提交时间(没有提交记录时为本地文件修改时间)升序排列
-        return (b.lastCommitTime || b.modifyTime) - (a.lastCommitTime || a.modifyTime)
+        return (b.options.lastCommitTime || b.options.modifyTime) - (a.options.lastCommitTime || a.options.modifyTime)
       },
-      useArticleTitle: true // 开启使用文章一级标题作为文章名称
+      useArticleTitle: true // 全局开启使用文章一级标题作为文章名称
     }),
   ],
 }

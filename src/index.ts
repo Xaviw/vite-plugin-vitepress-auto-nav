@@ -1,6 +1,6 @@
 import { sep, normalize, join, resolve, extname } from "path";
-import { utimesSync } from "fs";
-import { readFile, writeFile, stat } from "fs/promises";
+import { utimesSync, existsSync } from "fs";
+import { readFile, writeFile, stat, mkdir } from "fs/promises";
 import { spawn } from "child_process";
 import glob from "fast-glob";
 import matter from "gray-matter";
@@ -45,17 +45,6 @@ interface Options {
   useArticleTitle?: boolean;
 }
 
-/** 文件、文件夹时间戳信息 */
-interface TimesInfo {
-  /** 本地文件创建时间 */
-  birthTime?: number;
-  /** 本地文件修改时间 */
-  modifyTime?: number;
-  /** git首次提交时间（仅文件） */
-  firstCommitTime?: number;
-  /** git最后一次提交时间（仅文件） */
-  lastCommitTime?: number;
-}
 /**
  * 单个文件、文件夹配置项
  *
@@ -78,9 +67,6 @@ interface ItemOptions {
   collapsed?: boolean;
 }
 
-/** 文件保存的 options 数据 */
-type ItemCacheOptions = ItemOptions & TimesInfo & { h1?: string };
-
 /** 文件、文件夹关键信息 */
 interface Item {
   /** 同级中的位置下标 */
@@ -89,14 +75,39 @@ interface Item {
   name: string;
   /** 是否是文件夹 */
   isFolder: boolean;
-  /** 配置对象，包括 ItemOptions 配置、文章 frontmatter 中的 ItemOptions 配置、时间戳信息、文章内一级标题（h1） */
+  /** 配置对象(不包括frontmatter)，以及时间戳数据(TimesInfo) */
   options: ItemCacheOptions;
+  /** frontmatter 数据以及文章一级标题（h1） */
+  frontmatter: Frontmatter;
   /** 子文件、文件夹 */
   children: Item[];
 }
 
+/** 缓存的 options 数据 */
+type ItemCacheOptions = ItemOptions & TimesInfo;
+
+/** 文件、文件夹时间戳信息 */
+interface TimesInfo {
+  /** 本地文件创建时间 */
+  birthTime?: number;
+  /** 本地文件修改时间 */
+  modifyTime?: number;
+  /** git首次提交时间（仅文件） */
+  firstCommitTime?: number;
+  /** git最后一次提交时间（仅文件） */
+  lastCommitTime?: number;
+}
+
+/** 缓存的 frontmatter 数据 */
+type Frontmatter = { h1?: string } & Recordable;
+
+type Recordable = Record<string, any>;
+
 // 缓存数据，减少读取 git 时间戳和读取文件内容的次数
-let cache: Record<string, Record<string, any>> = {};
+let cache: Record<
+  string,
+  { options: ItemCacheOptions; frontmatter: Frontmatter }
+> = {};
 // 记录访问过的缓存，用于删除不再需要的缓存
 const visitedCache = new Set<string>();
 
@@ -126,9 +137,17 @@ export default function AutoNav(options: Options = {}): Plugin {
           });
           const { content, data } = matter(file);
           data.h1 = getArticleTitle(content, data);
-          for (let key in cache[path]) {
-            const newValue = data[`nav-${key}`] || data[key];
-            if (cache[path][key] !== newValue) {
+          // 数据项数量不一致，需要刷新
+          if (
+            Object.keys(data).length !==
+            Object.keys(cache[path].frontmatter).length
+          ) {
+            forceReload($configPath);
+            return;
+          }
+          // 数据线数量一致，需要对比数据是否变动
+          for (let key in data) {
+            if (cache[path].frontmatter[key] !== data[key]) {
               forceReload($configPath);
               return;
             }
@@ -153,6 +172,10 @@ export default function AutoNav(options: Options = {}): Plugin {
 
       // 清空访问过的缓存
       visitedCache.clear();
+      // 缓存目录若不存在，先创建
+      if (!existsSync(cacheDir)) {
+        await mkdir(cacheDir);
+      }
       // 获取缓存
       try {
         const cacheStr = await readFile(`${cacheDir}/auto-nav-cache.json`, {
@@ -240,10 +263,10 @@ async function serializationPaths(
       const realPath = resolve(srcDir, currentPath);
 
       // 通过是否有扩展名判断是文件还是文件夹
-      const isFolder = !name.includes(".");
+      const isFolder = !extname(name);
 
       // 自定义配置
-      let options: ItemCacheOptions = {};
+      let options: ItemCacheOptions = { useArticleTitle };
 
       // 查找itemsSetting是否有自定义配置
       // 先按路径匹配
@@ -255,22 +278,38 @@ async function serializationPaths(
         );
       }
       if (customInfoKey != null) {
-        const { collapsed, hide, sort, title, useArticleTitle } =
-          transformedSettings[customInfoKey];
-        options = { collapsed, hide, sort, title, useArticleTitle };
+        const {
+          collapsed,
+          hide,
+          sort,
+          title,
+          useArticleTitle: itemUseArticleTitle,
+        } = transformedSettings[customInfoKey];
+        options = {
+          collapsed,
+          hide,
+          sort,
+          title,
+          useArticleTitle: itemUseArticleTitle ?? options.useArticleTitle,
+        };
       }
 
-      // 获取文件、文件夹信息
-      const itemOptions = await getOptions(realPath, options);
-      options = { ...options, ...itemOptions };
-      options.useArticleTitle = options.useArticleTitle ?? useArticleTitle;
+      // 获取时间戳信息
+      const timestampData = await getTimestamp(realPath, isFolder);
+      options = { ...options, ...timestampData };
+
+      // 获取文章frontmatter
+      let frontmatter: Frontmatter = {};
+      if (!isFolder) {
+        frontmatter = await getArticleData(realPath);
+      }
 
       // 修改缓存并标记访问过
-      cache[realPath] = options;
+      cache[realPath] = { options, frontmatter };
       visitedCache.add(realPath);
 
       // 跳过不展示的部分
-      if (options.hide) break;
+      if (getTargetOptionValue(frontmatter, options, "hide")) break;
 
       // 查找该层级中是否已经处理过这个文件或文件夹
       let childNode = currentNode.find((node) => node.name === name);
@@ -278,11 +317,12 @@ async function serializationPaths(
       // 若未处理过，整理数据并添加到数组
       if (!childNode) {
         childNode = {
-          index: 0,
+          index: 0, // 占位，后续再实际赋值
           name,
           isFolder,
+          options,
+          frontmatter,
           children: [],
-          options: options,
         };
         currentNode.push(childNode);
       }
@@ -311,8 +351,8 @@ function sortStructuredData(
 
 /** 默认排序方法 */
 function defaultCompareFn(a: Item, b: Item) {
-  const sortA = a.options.sort;
-  const sortB = b.options.sort;
+  const sortA = getTargetOptionValue(a.frontmatter, a.options, "sort");
+  const sortB = getTargetOptionValue(b.frontmatter, b.options, "sort");
 
   const timeA = a.options.firstCommitTime || a.options.birthTime!;
   const timeB = b.options.firstCommitTime || b.options.birthTime!;
@@ -372,8 +412,13 @@ function generateSidebar(structuredData: Item[]): DefaultTheme.Sidebar {
     return subData.map((file) => {
       const filePath = `${parentPath}/${file.name}`;
       const fileName =
-        file.options.title ||
-        (file.options.useArticleTitle && file.options.h1) ||
+        getTargetOptionValue(file.frontmatter, file.options, "title") ||
+        (getTargetOptionValue(
+          file.frontmatter,
+          file.options,
+          "useArticleTitle"
+        ) &&
+          file.frontmatter.h1) ||
         file.name.replace(".md", "");
       if (file.isFolder) {
         return {
@@ -390,76 +435,73 @@ function generateSidebar(structuredData: Item[]): DefaultTheme.Sidebar {
   return sidebar;
 }
 
-/**
- * 获取文件、文件夹信息
- * @param absolutePath - 需要是绝对路径，与cache中对应
- * @param skipCache - 不使用缓存
- */
-async function getOptions(
-  absolutePath: string,
-  itemOptions: Record<string, any>
+/** 辅助方法：从 frontmatter 以及 options 中获取实际使用的配置 */
+function getTargetOptionValue(
+  fronmatter: Frontmatter,
+  options: ItemCacheOptions,
+  key: string
 ) {
-  const cacheData = cache[absolutePath];
-  if (
-    cacheData &&
-    Object.entries(itemOptions).every(
-      ([key, value]) => value === cacheData[key]
-    )
-  ) {
-    // 根据文件、文件夹更新时间判断是否需要重新获取信息
-    const currentMTime = cacheData && (await stat(absolutePath)).mtimeMs;
-    if (cacheData && currentMTime === cacheData.modifyTime) {
-      return cacheData;
-    }
-  }
-  const isFolder = !extname(absolutePath);
-  let options = await getTimestamp(absolutePath, isFolder);
-  if (!isFolder) {
-    const articleOptions = await getArticleData(absolutePath);
-    options = { ...options, ...articleOptions };
-  }
-  return options;
+  return fronmatter[`nav-${key}`] ?? fronmatter[key] ?? (options as any)[key];
 }
 
 /**
- * 读取md内容
+ * 读取文章frontmatter以及h1
  * @param absolutePath - 需要是绝对路径，与cache中对应
  */
-async function getArticleData(absolutePath: string) {
+async function getArticleData(absolutePath: string): Promise<Frontmatter> {
+  const cacheData = cache[absolutePath];
+  if (cacheData) {
+    // 根据文件、文件夹更新时间判断是否需要重新获取信息
+    const currentMTime = (await stat(absolutePath)).mtimeMs;
+    if (currentMTime === cacheData.options.modifyTime) {
+      return cacheData.frontmatter;
+    }
+  }
   // 读取文件
   const file = await readFile(absolutePath, { encoding: "utf-8" });
   // 解析文件内容和frontmatter
   const { content, data } = matter(file);
-  // 配置信息
-  const options: Omit<ItemOptions, "collapsed"> & Record<string, any> = {
-    hide: data["nav-hide"] || data.hide,
-    sort: data["nav-sort"] || data.sort,
-    title: data["nav-title"] || data.title,
-    useArticleTitle: data["nav-useArticleTitle"] || data.useArticleTitle,
-  };
   // 提取页面一级标题
-  options.h1 = getArticleTitle(content, data);
-  return options;
+  data.h1 = getArticleTitle(content, data);
+  return data;
 }
 
 /** 处理文章h1存在变量的情况 */
-function getArticleTitle(content: string, data: Record<string, any>) {
+function getArticleTitle(content: string, data: Recordable) {
   let h1 = content.match(/^\s*#\s+(.*)[\n\r][\s\S]*/)?.[1];
   if (h1) {
     // 标题可能使用了frontmatter变量
     const regexp = /\{\{\s*\$frontmatter\.(\S+?)\s*\}\}/g;
     let match;
     while ((match = regexp.exec(h1)) !== null) {
-      const replaceReg = new RegExp(`\{\{\s*\$frontmatter\.${match[1]}\s*\}\}`);
+      const replaceReg = new RegExp(
+        "\\{\\{\\s*\\$frontmatter\\." + match[1] + "\\s*\\}\\}",
+        "g"
+      );
       h1 = h1.replace(replaceReg, data[match[1]]);
     }
   }
   return h1;
 }
 
-/** 获取git时间戳 */
-async function getTimestamp(path: string, isFolder: boolean) {
-  const { birthtimeMs: birthTime, mtimeMs: modifyTime } = await stat(path);
+/**
+ * 获取git时间戳
+ * @param absolutePath - 需要是绝对路径，与cache中对应
+ */
+async function getTimestamp(absolutePath: string, isFolder: boolean) {
+  const cacheData = cache[absolutePath];
+  if (cacheData) {
+    // 根据文件、文件夹更新时间判断是否需要重新获取信息
+    const currentMTime = (await stat(absolutePath)).mtimeMs;
+    if (currentMTime === cacheData.options.modifyTime) {
+      const { birthTime, modifyTime, firstCommitTime, lastCommitTime } =
+        cacheData.options;
+      return { birthTime, modifyTime, firstCommitTime, lastCommitTime };
+    }
+  }
+  const { birthtimeMs: birthTime, mtimeMs: modifyTime } = await stat(
+    absolutePath
+  );
   return new Promise<{
     birthTime?: number;
     modifyTime?: number;
@@ -474,7 +516,12 @@ async function getTimestamp(path: string, isFolder: boolean) {
     let output: number[] = [];
 
     // 开启子进程执行git log命令
-    const child = spawn("git", ["--no-pager", "log", '--pretty="%ci"', path]);
+    const child = spawn("git", [
+      "--no-pager",
+      "log",
+      '--pretty="%ci"',
+      absolutePath,
+    ]);
 
     // 监听输出流
     child.stdout.on("data", (d) => {
