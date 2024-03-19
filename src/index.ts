@@ -92,9 +92,9 @@ interface TimesInfo {
   birthTime?: number;
   /** 本地文件修改时间 */
   modifyTime?: number;
-  /** git首次提交时间（仅文件） */
+  /** git首次提交时间 */
   firstCommitTime?: number;
-  /** git最后一次提交时间（仅文件） */
+  /** git最后一次提交时间 */
   lastCommitTime?: number;
 }
 
@@ -125,37 +125,8 @@ export default function AutoNav(options: Options = {}): Plugin {
         configPath?.match(/(\.vitepress.*)/)?.[1] || ".vitepress/config.ts";
 
       // VitePress 中已经添加了对所有 md 文件的监听，这里只需要处理事件
-      watcher.on("all", async (event, path) => {
-        // 过滤非 md 文件操作
-        if (!path.endsWith(".md")) return;
-
-        // 检查关键 frontmatter 信息是否修改
-        if (event === "change" && cache[path]) {
-          // 有缓存时对比数据
-          const file = await readFile(path, {
-            encoding: "utf-8",
-          });
-          const { content, data } = matter(file);
-          data.h1 = getArticleTitle(content, data);
-          // 数据项数量不一致，需要刷新
-          if (
-            Object.keys(data).length !==
-            Object.keys(cache[path].frontmatter).length
-          ) {
-            forceReload($configPath);
-            return;
-          }
-          // 数据线数量一致，需要对比数据是否变动
-          for (let key in data) {
-            if (cache[path].frontmatter[key] !== data[key]) {
-              forceReload($configPath);
-              return;
-            }
-          }
-        } else {
-          forceReload($configPath);
-        }
-      });
+      // 添加 1500ms 的节流，避免同时保存多个文件时重复触发刷新
+      watcher.on("all", throttle(mdWatcher.bind(null, $configPath), 1500));
     },
     async config(config) {
       console.log("🎈 auto-nav 生成中...");
@@ -203,6 +174,9 @@ export default function AutoNav(options: Options = {}): Plugin {
       // 处理文件路径数组为多级结构化数据
       let data = await serializationPaths(paths, options, srcDir);
 
+      // 处理文件夹 git 时间戳
+      updateCommitTimes(data);
+
       // 数据排序
       data = sortStructuredData(data, options.compareFn);
 
@@ -229,6 +203,42 @@ export default function AutoNav(options: Options = {}): Plugin {
       return config;
     },
   };
+}
+
+/** 文件变动事件 */
+async function mdWatcher(
+  configPath: string,
+  event: "add" | "addDir" | "change" | "unlink" | "unlinkDir",
+  path: string
+) {
+  // 过滤非 md 文件操作
+  if (!path.endsWith(".md")) return;
+
+  // 检查关键 frontmatter 信息是否修改
+  if (event === "change" && cache[path]) {
+    // 有缓存时对比数据
+    const file = await readFile(path, {
+      encoding: "utf-8",
+    });
+    const { content, data } = matter(file);
+    data.h1 = getArticleTitle(content, data);
+    // 数据项数量不一致，需要刷新
+    if (
+      Object.keys(data).length !== Object.keys(cache[path].frontmatter).length
+    ) {
+      forceReload(configPath);
+      return;
+    }
+    // 数据线数量一致，需要对比数据是否变动
+    for (let key in data) {
+      if (cache[path].frontmatter[key] !== data[key]) {
+        forceReload(configPath);
+        return;
+      }
+    }
+  } else {
+    forceReload(configPath);
+  }
 }
 
 /** 处理文件路径字符串数组 */
@@ -331,6 +341,56 @@ async function serializationPaths(
     }
   }
   return root;
+}
+
+/** 处理文件夹的 git 时间戳 */
+function updateCommitTimes(data: Item[]): void {
+  for (const item of data) {
+    if (item.isFolder) {
+      updateCommitTimes(item.children);
+      const folderTimes = getFolderCommitTimes(item.children);
+      item.options.firstCommitTime = folderTimes.minFirstCommitTime;
+      item.options.lastCommitTime = folderTimes.maxLastCommitTime;
+    }
+  }
+}
+
+/** 获取文件夹内子文件、文件夹最小和最大的 git 时间戳 */
+function getFolderCommitTimes(children: Item[]): {
+  minFirstCommitTime?: number;
+  maxLastCommitTime?: number;
+} {
+  let minFirstCommitTime: number | undefined;
+  let maxLastCommitTime: number | undefined;
+
+  for (const item of children) {
+    if (item.isFolder) {
+      const folderTimes = getFolderCommitTimes(item.children);
+      minFirstCommitTime = Math.min(
+        minFirstCommitTime ?? Infinity,
+        folderTimes.minFirstCommitTime ?? Infinity
+      );
+      maxLastCommitTime = Math.max(
+        maxLastCommitTime ?? 0,
+        folderTimes.maxLastCommitTime ?? 0
+      );
+    } else {
+      minFirstCommitTime = Math.min(
+        minFirstCommitTime ?? Infinity,
+        item.options.firstCommitTime ?? Infinity
+      );
+      maxLastCommitTime = Math.max(
+        maxLastCommitTime ?? 0,
+        item.options.lastCommitTime ?? 0
+      );
+    }
+  }
+
+  return {
+    minFirstCommitTime:
+      minFirstCommitTime === Infinity ? undefined : minFirstCommitTime,
+    maxLastCommitTime: maxLastCommitTime === 0 ? undefined : maxLastCommitTime,
+  };
 }
 
 /** 对结构化后的多级数组数据进行逐级排序 */
@@ -562,4 +622,26 @@ async function getTimestamp(absolutePath: string, isFolder: boolean) {
 function forceReload(path: string) {
   // 修改配置文件系统时间戳，触发更新
   utimesSync(path, new Date(), new Date());
+}
+
+/** 节流 */
+function throttle<T extends (...args: any[]) => void>(func: T, delay: number) {
+  let lastExecTime = 0;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  return function (this: ThisParameterType<T>, ...args: Parameters<T>) {
+    const currentTime = Date.now();
+    const timeSinceLastExec = currentTime - lastExecTime;
+
+    if (timeSinceLastExec >= delay) {
+      func.apply(this, args);
+      lastExecTime = currentTime;
+    } else {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        func.apply(this, args);
+        lastExecTime = Date.now();
+      }, delay - timeSinceLastExec);
+    }
+  };
 }
