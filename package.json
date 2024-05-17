@@ -1,11 +1,15 @@
 {
   "name": "vite-plugin-vitepress-auto-nav",
-  "version": "2.2.2",
+  "version": "2.3.0",
   "description": "自动生成vitepress的nav与sidebar",
   "keywords": [
-    "vite-plugin",
     "vitepress",
-    "vitepress-auto"
+    "vite-plugin",
+    "vitepress-plugin",
+    "vitepress-auto",
+    "auto-nav",
+    "auto-sidebar",
+    "auto-menu"
   ],
   "homepage": "https://xaviw.github.io/XaviDocs/",
   "bugs": "https://github.com/Xaviw/vite-plugin-vitepress-auto-nav/issues",

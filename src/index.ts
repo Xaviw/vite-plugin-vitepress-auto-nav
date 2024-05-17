@@ -43,6 +43,26 @@ interface Options {
   compareFn?: (a: Item, b: Item) => number;
   /** 是否使用文章中的一级标题代替文件名作为文章名称（处理文件名可能是简写的情况），也可以在 itemsSetting 中单独配置 */
   useArticleTitle?: boolean;
+  /** 用于支持从 Gitbook 的 SUMMARY 文件生成目录，添加后其他配置将不再生效 */
+  summary?: {
+    /** SUMMARY.md 文件路径 */
+    target: string;
+    /**
+     * 同 SidebarItem.collapsed
+     *
+     * 未指定时，不可折叠
+     *
+     * 为 true 时，可折叠且默认折叠
+     *
+     * 为 false 时，可折叠且默认展开
+     */
+    collapsed?: boolean;
+    /**
+     * 去掉转义字符 "\"
+     * @default true
+     */
+    removeEscape?: boolean;
+  };
 }
 
 /**
@@ -126,11 +146,23 @@ export default function AutoNav(options: Options = {}): Plugin {
 
       // VitePress 中已经添加了对所有 md 文件的监听，这里只需要处理事件
       // 添加 1500ms 的节流，避免同时保存多个文件时重复触发刷新
-      watcher.on("all", throttle(mdWatcher.bind(null, $configPath), 1500));
+      const throttleMdWatcher = throttle(
+        mdWatcher.bind(null, $configPath),
+        1500
+      );
+      watcher.on("all", (eventName, path) => {
+        // 存在 summary 配置时，summaryFile 文件变动即刷新
+        if (
+          options.summary?.target &&
+          normalize(path) === normalize(options.summary.target)
+        ) {
+          forceReload($configPath);
+        } else {
+          throttleMdWatcher(eventName, path);
+        }
+      });
     },
     async config(config) {
-      console.log("🎈 auto-nav 生成中...");
-
       const {
         vitepress: {
           userConfig: { srcExclude = [], srcDir = "./" },
@@ -141,6 +173,20 @@ export default function AutoNav(options: Options = {}): Plugin {
         },
       } = config as unknown as UserConfig;
 
+      if (options.summary) {
+        console.log("🎈 SUMMARY 解析中...");
+        const { sidebar, nav: _nav } = await parseSummary(options.summary);
+        (config as unknown as UserConfig).vitepress.site.themeConfig.sidebar =
+          sidebar;
+        if (!nav) {
+          (config as unknown as UserConfig).vitepress.site.themeConfig.nav =
+            _nav;
+        }
+        console.log("🎈 SUMMARY 解析完成...");
+        return config;
+      }
+
+      console.log("🎈 auto-nav 生成中...");
       // 清空访问过的缓存
       visitedCache.clear();
       // 缓存目录若不存在，先创建
@@ -644,4 +690,89 @@ function throttle<T extends (...args: any[]) => void>(func: T, delay: number) {
       }, delay - timeSinceLastExec);
     }
   };
+}
+
+/** summary 处理逻辑 */
+async function parseSummary(options: NonNullable<Options["summary"]>) {
+  const { target, collapsed, removeEscape = true } = options;
+  // 读取文件
+  const file = await readFile(normalize(target), { encoding: "utf-8" });
+  const lines = file.split(/\r?\n/).filter((item) => item.trim());
+
+  // 最终配置
+  const sidebar: DefaultTheme.Sidebar = [];
+  const nav: DefaultTheme.NavItemWithLink[] = [];
+  // 处理栈
+  const stack: { depth: number; sidebarItem: DefaultTheme.SidebarItem }[] = [];
+  // 缩进符
+  let indent: string | undefined;
+
+  for (let i = 0; i < lines.length; i++) {
+    let lastItem = stack[stack.length - 1];
+    const str = lines[i];
+    const trimStr = str.trim();
+
+    if (trimStr.startsWith("#")) {
+      // 处理标题
+      let [_, flag, text] = /^\s*(#+)\s+(.+?)\s*$/.exec(str) || [];
+      if (!flag || !text) continue;
+      text = removeEscape ? text.replace(/\\/g, "") : text;
+
+      // 标题层级
+      const depth = -flag.length;
+      const sidebarItem: DefaultTheme.SidebarItem = {
+        text,
+        items: [],
+        collapsed,
+      };
+
+      if (depth === -1) {
+        // 一级标题直接入栈
+        sidebar.push(sidebarItem);
+        stack.push({ depth, sidebarItem });
+        nav.push({ text, link: "" });
+      } else {
+        // 其他级别标题，需要先找到栈中的一级标题
+        while (lastItem && (lastItem.depth >= 0 || lastItem.depth <= depth)) {
+          stack.pop();
+          lastItem = stack[stack.length - 1];
+        }
+        if (lastItem?.sidebarItem) {
+          lastItem.sidebarItem.items?.push(sidebarItem);
+          stack.push({ depth, sidebarItem });
+        }
+      }
+    } else if (trimStr.startsWith("*") || trimStr.startsWith("-")) {
+      // 处理菜单项
+      let [_, strIndent, text, link] =
+        /^(\s*)[\*\-]\s+\[(.+)\]\((.+).md\)\s*$/.exec(str) || [];
+      if (!link) continue;
+      text = removeEscape ? text.replace(/\\/g, "") : text;
+
+      const sidebarItem: DefaultTheme.SidebarItem = {
+        text,
+        link,
+        items: [],
+        collapsed,
+      };
+
+      if (indent === undefined && strIndent) indent = strIndent;
+
+      const depth = strIndent ? strIndent.length / indent!.length : 0;
+
+      while (lastItem && lastItem.depth >= depth) {
+        stack.pop();
+        lastItem = stack[stack.length - 1];
+      }
+      if (lastItem?.sidebarItem) {
+        lastItem.sidebarItem.items?.push(sidebarItem);
+        stack.push({ depth, sidebarItem });
+        if (nav.length && !nav[nav.length - 1].link) {
+          nav[nav.length - 1].link = link;
+        }
+      }
+    }
+  }
+
+  return { sidebar, nav };
 }
