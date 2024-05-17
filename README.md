@@ -13,6 +13,7 @@ Automatically generate `nav` and `sidebar` configurations for `VitePress`.
 - Supports custom sorting methods
 - Supports hiding files or folders
 - Auto-refreshes after modifying plugin configuration or `frontmatter`
+- Supports using the same `SUMMARY.md` file as the `Gitbook` as the `sidebar` configuration.
 
 ## 🕯️ Usage
 
@@ -82,6 +83,26 @@ interface Options {
 
   /** Whether to use the top-level heading of an article as its name (to handle cases where the file name may be an abbreviation). Can also be individually configured in the itemsSetting. */
   useArticleTitle?: boolean;
+  /** This is used to support generating directories from Gitbook's SUMMARY file, and the other configurations will no longer take effect once it is added. */
+  summary?: {
+    /** path to SUMMARY.md */
+    target: string;
+    /**
+     * Same as SidebarItem.collapsed
+     *
+     * If not specified, group is not collapsible.
+     *
+     * If `true`, group is collapsible and collapsed by default
+     *
+     * If `false`, group is collapsible but expanded by default
+     */
+    collapsed?: boolean;
+    /**
+     * Remove escaped characters "\"
+     * @default true
+     */
+    removeEscape?: boolean;
+  };
 }
 
 /**
