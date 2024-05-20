@@ -47,6 +47,8 @@ export default defineConfig({
 
 ## 🛠️ Configuration
 
+> The generated `nav` configuration will use the first article in the directory as the `link` attribute. If you need to customize the `nav`, you can manually define it, and the plugin will not modify the existing `nav` configuration (because `nav` configurations are usually minimal, manually configuring them is more cost-effective than complex configuration in the plugin).
+
 **You can also configure properties from `ItemOptions` in the article `frontmatter`. Configuration in the format of `nav-propertyName` can be used to avoid conflicts with variables in the logic. Other variables in the `frontmatter` will also be included in the `frontmatter` property of the sorting function parameters.**
 
 ```ts
@@ -172,8 +174,6 @@ type Frontmatter = { h1?: string } & Recordable;
 
 type Recordable = Record<string, any>;
 ```
-
-> The generated `nav` configuration will use the first article in the directory as the `link` attribute. If you need to customize the `nav`, you can manually define it, and the plugin will not modify the existing `nav` configuration (because `nav` configurations are usually minimal, manually configuring them is more cost-effective than complex configuration in the plugin).
 
 ## 🎊 Configuration Example
 

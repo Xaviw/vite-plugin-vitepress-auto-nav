@@ -4,7 +4,7 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "Node",
-    "lib": [ "ESNext" ],
+    "lib": ["ESNext"],
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "esModuleInterop": true,
@@ -12,6 +12,7 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "skipLibCheck": true,
-  }
+    "skipLibCheck": true
+  },
+  "include": ["types/*.d.ts", "src/*.ts"]
 }

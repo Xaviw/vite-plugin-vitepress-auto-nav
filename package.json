@@ -1,12 +1,14 @@
 {
   "name": "vite-plugin-vitepress-auto-nav",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "description": "自动生成vitepress的nav与sidebar",
   "keywords": [
     "vitepress",
     "vite-plugin",
     "vitepress-plugin",
     "vitepress-auto",
+    "vitepress-gitbook",
+    "vitepress-summary",
     "auto-nav",
     "auto-sidebar",
     "auto-menu"
@@ -30,7 +32,8 @@
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "types"
   ],
   "scripts": {
     "build": "rollup -c"
@@ -46,12 +49,12 @@
     "rollup": "^3.29.1",
     "rollup-plugin-typescript2": "^0.35.0",
     "typescript": "^5.2.2",
-    "vite": "^5.1.4",
-    "vitepress": "1.0.0-rc.45"
+    "vite": "^5.2.11",
+    "vitepress": "1.2.0"
   },
   "peerDependencies": {
-    "vite": "^5.0.0",
-    "vitepress": "^1.0.0-rc.45"
+    "vite": "^5.2.11",
+    "vitepress": "^1.2.0"
   },
   "engines": {
     "node": ">=18.0.0"
