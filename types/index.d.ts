@@ -1,3 +1,5 @@
+import type { DefaultTheme, SiteConfig } from "vitepress";
+
 export interface UserConfig {
   vitepress: SiteConfig<DefaultTheme.Config>;
 }

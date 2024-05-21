@@ -60,6 +60,7 @@ export default async function parseSummary(
       let [_, strIndent, text, link] =
         /^(\s*)[\*\-]\s+\[(.+)\]\((.+).md\)\s*$/.exec(str) || [];
       if (!link) continue;
+      if (!link.startsWith("/")) link = `/${link}`;
       text = removeEscape ? text.replace(/\\/g, "") : text;
 
       const sidebarItem: DefaultTheme.SidebarItem = {
