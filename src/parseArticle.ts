@@ -2,7 +2,7 @@ import { readFile, stat } from "fs/promises";
 import matter from "gray-matter";
 import { cache, visitedCache } from "./index";
 import { getTargetOptionValue, getTimestamp } from "./utils";
-import { extname, join, normalize, resolve, sep } from "path";
+import { join, normalize, resolve, sep } from "path";
 import type {
   Frontmatter,
   Item,
@@ -44,8 +44,8 @@ export async function serializationPaths(
       // 拼接 srcDir 得到实际文件路径
       const realPath = resolve(srcDir, currentPath);
 
-      // 通过是否有扩展名判断是文件还是文件夹
-      const isFolder = !extname(name);
+      // 判断是文件还是文件夹
+      const isFolder = (await stat(realPath)).isDirectory();
 
       // 自定义配置
       let options: ItemCacheOptions = { useArticleTitle };
