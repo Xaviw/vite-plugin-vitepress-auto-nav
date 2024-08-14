@@ -113,9 +113,11 @@ export function forceReload(path: string) {
 export function getTargetOptionValue(
   frontmatter: Frontmatter,
   options: ItemCacheOptions,
-  key: string
+  key: string,
+  frontmatterPrefix: string = ""
 ) {
-  return frontmatter[`nav-${key}`] ?? frontmatter[key] ?? (options as any)[key];
+  const k = `${frontmatterPrefix}${key}`;
+  return frontmatter[k] ?? (options as any)[k];
 }
 
 /** 获取文件夹内子文件、文件夹最小和最大的 git 时间戳 */

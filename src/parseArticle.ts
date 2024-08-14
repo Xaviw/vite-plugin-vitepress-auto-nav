@@ -16,7 +16,7 @@ import type { DefaultTheme } from "vitepress";
 /** 处理文件路径字符串数组 */
 export async function serializationPaths(
   paths: string[],
-  { itemsSetting = {}, useArticleTitle }: Options,
+  { itemsSetting = {}, useArticleTitle, frontmatterPrefix }: Options,
   srcDir: string
 ) {
   // 统一自定义配置中的路径格式，便于匹配
@@ -91,7 +91,8 @@ export async function serializationPaths(
       visitedCache.add(realPath);
 
       // 跳过不展示的部分
-      if (getTargetOptionValue(frontmatter, options, "hide")) break;
+      if (getTargetOptionValue(frontmatter, options, "hide", frontmatterPrefix))
+        break;
 
       // 查找该层级中是否已经处理过这个文件或文件夹
       let childNode = currentNode.find((node) => node.name === name);
@@ -118,23 +119,46 @@ export async function serializationPaths(
 /** 对结构化后的多级数组数据进行逐级排序 */
 export function sortStructuredData(
   data: Item[],
-  compareFn: (a: Item, b: Item) => number = defaultCompareFn
+  compareFn: (
+    a: Item,
+    b: Item,
+    frontmatterPrefix?: string
+  ) => number = defaultCompareFn,
+  frontmatterPrefix: string = ""
 ): Item[] {
   return data
     .map((item, index) => {
       item.index = index;
       if (item.children && item.children.length > 0) {
-        item.children = sortStructuredData(item.children, compareFn);
+        item.children = sortStructuredData(
+          item.children,
+          compareFn,
+          frontmatterPrefix
+        );
       }
       return item;
     })
-    .sort(compareFn);
+    .sort((a, b) => compareFn(a, b, frontmatterPrefix));
 }
 
 /** 默认排序方法 */
-export function defaultCompareFn(a: Item, b: Item) {
-  const sortA = getTargetOptionValue(a.frontmatter, a.options, "sort");
-  const sortB = getTargetOptionValue(b.frontmatter, b.options, "sort");
+export function defaultCompareFn(
+  a: Item,
+  b: Item,
+  frontmatterPrefix: string = ""
+) {
+  const sortA = getTargetOptionValue(
+    a.frontmatter,
+    a.options,
+    "sort",
+    frontmatterPrefix
+  );
+  const sortB = getTargetOptionValue(
+    b.frontmatter,
+    b.options,
+    "sort",
+    frontmatterPrefix
+  );
 
   const timeA = a.options.firstCommitTime || a.options.birthTime!;
   const timeB = b.options.firstCommitTime || b.options.birthTime!;
@@ -179,39 +203,67 @@ export function getFirstArticleFromFolder(data: Item, path = "") {
 }
 
 /** 生成 sidebar */
-export function generateSidebar(structuredData: Item[]): DefaultTheme.Sidebar {
+export function generateSidebar(
+  structuredData: Item[],
+  options: Options
+): DefaultTheme.Sidebar {
+  const { indexAsFolderLink = true, frontmatterPrefix = "" } = options;
   const sidebar: DefaultTheme.Sidebar = {};
 
   // 遍历首层目录（nav），递归生成对应的 sidebar
   for (const { name, children } of structuredData) {
-    sidebar[`/${name}/`] = traverseSubFile(children, `/${name}`);
+    sidebar[`/${name}/`] = traverseSubFile(children, `/${name}`).sidebarMulti;
   }
 
   function traverseSubFile(
     subData: Item[],
     parentPath: string
-  ): DefaultTheme.SidebarItem[] {
-    return subData.map((file) => {
-      const filePath = `${parentPath}/${file.name}`;
+  ): { link?: string; sidebarMulti: DefaultTheme.SidebarItem[] } {
+    // 如果下级有 index，临时记录
+    let link: string | undefined = undefined;
+
+    const sidebarMulti = subData.reduce((p, file) => {
+      const isIndex = file.name.replace(".md", "") === "index";
+
+      const filePath = isIndex
+        ? `${parentPath}/`
+        : `${parentPath}/${file.name}`;
+
+      if (indexAsFolderLink && isIndex) {
+        link = filePath;
+        return p;
+      }
+
       const fileName =
-        getTargetOptionValue(file.frontmatter, file.options, "title") ||
+        getTargetOptionValue(
+          file.frontmatter,
+          file.options,
+          "title",
+          frontmatterPrefix
+        ) ||
         (getTargetOptionValue(
           file.frontmatter,
           file.options,
-          "useArticleTitle"
+          "useArticleTitle",
+          frontmatterPrefix
         ) &&
           file.frontmatter.h1) ||
         file.name.replace(".md", "");
       if (file.isFolder) {
-        return {
+        const result = traverseSubFile(file.children, filePath);
+        p.push({
           text: fileName,
           collapsed: file.options.collapsed ?? false,
-          items: traverseSubFile(file.children, filePath),
-        };
+          items: result.sidebarMulti,
+          link: result.link,
+        });
       } else {
-        return { text: fileName, link: filePath.replace(".md", "") };
+        p.push({ text: fileName, link: filePath.replace(".md", "") });
       }
-    });
+      return p;
+    }, [] as DefaultTheme.SidebarItem[]);
+
+    return { sidebarMulti, link };
   }
 
   return sidebar;

@@ -132,7 +132,7 @@ export default function AutoNav(options: Options = {}): Plugin {
       }
 
       // 生成侧边栏目录
-      const sidebar = generateSidebar(data);
+      const sidebar = generateSidebar(data, options);
       (config as unknown as UserConfig).vitepress.site.themeConfig.sidebar =
         sidebar;
 
