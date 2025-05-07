@@ -1,7 +1,17 @@
 {
   "name": "vite-plugin-vitepress-auto-nav",
-  "version": "3.0.0",
+  "type": "module",
+  "version": "4.0.0",
+  "packageManager": "pnpm@10.10.0",
   "description": "自动生成vitepress的nav与sidebar",
+  "author": "xavi",
+  "license": "MIT",
+  "homepage": "https://xaviw.github.io/XaviDocs/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Xaviw/vite-plugin-vitepress-auto-nav.git"
+  },
+  "bugs": "https://github.com/Xaviw/vite-plugin-vitepress-auto-nav/issues",
   "keywords": [
     "vitepress",
     "vite-plugin",
@@ -13,15 +23,6 @@
     "auto-sidebar",
     "auto-menu"
   ],
-  "homepage": "https://xaviw.github.io/XaviDocs/",
-  "bugs": "https://github.com/Xaviw/vite-plugin-vitepress-auto-nav/issues",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Xaviw/vite-plugin-vitepress-auto-nav.git"
-  },
-  "license": "MIT",
-  "author": "xavi",
-  "type": "module",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -35,27 +36,39 @@
     "dist",
     "types"
   ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
-    "build": "rollup -c"
-  },
-  "dependencies": {
-    "fast-glob": "^3.3.1",
-    "gray-matter": "^4.0.3"
-  },
-  "devDependencies": {
-    "@rollup/plugin-node-resolve": "^15.2.3",
-    "@rollup/plugin-terser": "^0.4.3",
-    "@types/node": "^20.5.9",
-    "rollup": "^3.29.1",
-    "rollup-plugin-typescript2": "^0.35.0",
-    "typescript": "^5.2.2"
+    "lint": "eslint . --fix",
+    "clean": "npx -y rimraf node_modules dist",
+    "taze": "npx -y taze -I",
+    "postinstall": "npx -y simple-git-hooks",
+    "inspect:lint": "npx -y @eslint/config-inspector",
+    "inspect:dep": "npx -y node_modules_inspector"
   },
   "peerDependencies": {
-    "vite": ">=4.0.0",
-    "vitepress": ">=1.0.0"
+    "vitepress": "*"
   },
-  "engines": {
-    "node": ">=18.0.0"
+  "dependencies": {
+    "tiny-glob": "^0.2.9"
   },
-  "packageManager": "pnpm@9.5.0"
+  "devDependencies": {
+    "@antfu/eslint-config": "^4.13.0",
+    "@tsconfig/node-lts": "^22.0.1",
+    "@types/node": "^22.15.14",
+    "eslint": "^9.26.0",
+    "lint-staged": "^15.5.2",
+    "rollup": "^4.40.2",
+    "rollup-plugin-typescript2": "^0.36.0",
+    "simple-git-hooks": "^2.13.0",
+    "typescript": "^5.8.3",
+    "vitepress": "*"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm lint-staged"
+  },
+  "lint-staged": {
+    "*": "eslint --fix"
+  }
 }

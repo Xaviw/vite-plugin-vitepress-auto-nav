@@ -1,18 +1,7 @@
 {
+  "extends": ["@tsconfig/node-lts/tsconfig.json"],
   "compilerOptions": {
-    "declaration": true,
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "Node",
-    "lib": ["ESNext"],
-    "isolatedModules": true,
-    "verbatimModuleSyntax": true,
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "skipLibCheck": true
+    "types": ["node"]
   },
-  "include": ["types/*.d.ts", "src/*.ts"]
+  "$schema": "https://json.schemastore.org/tsconfig"
 }
