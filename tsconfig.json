@@ -1,7 +1,15 @@
 {
-  "extends": ["@tsconfig/node-lts/tsconfig.json"],
   "compilerOptions": {
-    "types": ["node"]
+    "target": "ESNext",
+    "lib": [
+      "ESNext"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
   },
   "$schema": "https://json.schemastore.org/tsconfig"
 }

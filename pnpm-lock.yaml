@@ -11,6 +11,9 @@ importers:
       front-matter:
         specifier: ^4.0.2
         version: 4.0.2
+      minimatch:
+        specifier: ^10.0.1
+        version: 10.0.1
       tiny-glob:
         specifier: ^0.2.9
         version: 0.2.9
@@ -18,9 +21,6 @@ importers:
       '@antfu/eslint-config':
         specifier: ^4.13.0
         version: 4.13.0(@typescript-eslint/utils@8.32.0(eslint@9.26.0)(typescript@5.8.3))(@vue/compiler-sfc@3.5.13)(eslint@9.26.0)(typescript@5.8.3)
-      '@tsconfig/node-lts':
-        specifier: ^22.0.1
-        version: 22.0.1
       '@types/node':
         specifier: ^22.15.14
         version: 22.15.14
@@ -783,9 +783,6 @@ packages:
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
     peerDependencies:
       eslint: '>=9.0.0'
-
-  '@tsconfig/node-lts@22.0.1':
-    resolution: {integrity: sha512-BwlbLiYurZKrj+Pa6etSE1jXmr3VEDdgJto1jEYKcpBVwZZSWVkCPyFEFYbHdIOaFMlSTtV206DYPlT109aqug==}
 
   '@tybys/wasm-util@0.9.0':
     resolution: {integrity: sha512-6+7nlbMVX/PVDCwaIQ8nTOPveOcFLSt8GcXdx8hD0bt39uWxYT88uXzqTd4fTvqta7oeUJqudepapKNt2DYJFw==}
@@ -3463,8 +3460,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
       - typescript
-
-  '@tsconfig/node-lts@22.0.1': {}
 
   '@tybys/wasm-util@0.9.0':
     dependencies:

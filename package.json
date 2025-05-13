@@ -53,11 +53,11 @@
   },
   "dependencies": {
     "front-matter": "^4.0.2",
+    "minimatch": "^10.0.1",
     "tiny-glob": "^0.2.9"
   },
   "devDependencies": {
     "@antfu/eslint-config": "^4.13.0",
-    "@tsconfig/node-lts": "^22.0.1",
     "@types/node": "^22.15.14",
     "eslint": "^9.26.0",
     "lint-staged": "^15.5.2",

@@ -12,27 +12,78 @@ export interface VitepressUserConfig extends UserConfig {
 /** 插件配置项 */
 export interface Options {
   /**
-   * 对特定文件或文件夹进行配置
-   *
-   * 键为 glob 表达式，值为配置对象
-   *
-   * md 文件 frontmatter 中支持相同配置项，且优先级更高（支持通过 frontmatterPrefix 属性自定义配置前缀）
+   * glob 表达式字符串数组，用于排除某些文件或文件夹
+   * @remark
+   * 排除的页面还是能够通过链接访问，如果希望彻底排除，请使用 vitepress 的 srcExclude 配置；
+   * 空文件夹始终会被排除
    */
-  settings?: Record<string, ItemConfig>
-
-  /**
-   * frontmatter 中配置属性需要添加的前缀
-   */
-  frontmatterPrefix?: string
+  exclude?: string[]
 
   /**
    * 自定义排序方法，同级文件、文件夹会调用这个函数进行排序
-   *
-   * > 创建时间为首次 git 提交时间，不存在 git 提交时间则为本地文件创建时间
-   *
-   * 默认排序方法 defaultComparer 规则为：优先按 sort 值升序排列，其次按创建时间升序排列
+   * @default
+   * ```js
+   * () => {
+   *    // 创建时间升序
+   *    const timeA = a.timesInfo.firstCommitTime || a.timesInfo.localBirthTime
+   *    const timeB = b.timesInfo.firstCommitTime || b.timesInfo.localBirthTime
+   *    return timeA - timeB
+   * }
+   * ```
    */
-  comparer?: (a: ItemInfo, b: ItemInfo, frontmatterPrefix: string = '') => number
+  comparer?: (a: FileInfo | FolderInfo, b: FileInfo | FolderInfo) => number
+
+  /**
+   * 每一项文件或文件夹生成为 sidebarItem 的方法
+   * @remark
+   * 第二个参数为子文件、文件夹生成的 sidebarItem 数组；
+   * 返回 false 会忽略生成该项
+   * @default
+   * ```js
+   * (item, children) => {
+   *    if(item.name === 'index') return
+   *    return {
+   *      text: item.name,
+   *      link: item.path,
+   *      items: children,
+   *    }
+   * }
+   * ```
+   */
+  sidebarItemHandler?: <T extends Recordable = DefaultTheme.SidebarItem>(item: FileInfo | FolderInfo, children?: T[] | undefined) => T | false
+
+  /**
+   * 每一项文件或文件夹生成为 navItem 的方法
+   * @remark
+   * 第二个参数为子文件、文件夹生成的 navItem 数组；
+   * 返回 false 会忽略生成该项
+   * @default
+   * ```js
+   * (item, children) => {
+   *    if(item.name === 'index' || item.depth > 1) return
+   *    return {
+   *      text: item.name,
+   *      items: children,
+   *      link: item.path,
+   *      activeMatch
+   *    }
+   * }
+   * ```
+   */
+  navItemHandler?: <T extends Recordable = DefaultTheme.NavItemWithLink | DefaultTheme.NavItemWithChildren>(item: FileInfo | FolderInfo, children?: T[] | undefined) => T | false
+
+  /**
+   * 解析得到 sidebar、nav 后合并到 vitepress 配置的方法（在不兼容 DefaultTheme 的主题中使用）
+   * @default
+   * ```ts
+   * (config, data) => {
+   *    config.vitepress.site.themeConfig.sidebar = data.sidebar
+   *    config.vitepress.site.themeConfig.nav = data.nav
+   *    return config
+   * }
+   * ```
+   */
+  handler?: (config: VitepressUserConfig, data: { sidebar: DefaultTheme.Sidebar, nav: DefaultTheme.NavItemWithLink }) => MaybePromise<Omit<VitepressUserConfig, 'plugins'>>
 
   /** 用于支持从 Gitbook 的 SUMMARY 文件生成 sidebar 与 nav，添加后其他配置将不再生效 */
   summary?: {
@@ -54,64 +105,51 @@ export interface Options {
      */
     removeEscape?: boolean
   }
-
-  /**
-   * 解析得到 sidebar、nav 后合并到 vitepress 配置的方法，在不兼容 DefaultTheme 的主题中使用
-   *
-   * 默认修改方式为：
-   * ```ts
-   * config.vitepress.site.themeConfig.sidebar = data.sidebar
-   * config.vitepress.site.themeConfig.nav = data.nav
-   * return config
-   * ```
-   */
-  handler?: (config: VitepressUserConfig, data: { sidebar: DefaultTheme.Sidebar, nav: DefaultTheme.NavItemWithLink }) => MaybePromise<Omit<VitepressUserConfig, 'plugins'>>
-}
-
-/**
- * 对特定文件或文件夹进行配置
- */
-export interface ItemConfig {
-  /** 是否显示 */
-  hide?: boolean
-  /** 排序值 */
-  sort?: number
-  /** 重定义展示名称，优先级高于 useArticleTitle */
-  title?: string
-  /** 是否使用文章中的标题代替文件名作为显示名称（首个标题，不分级别，文章内不存在标题时该配置无效） */
-  useArticleTitle?: boolean
-  /**
-   * 同 vitepress 默认主题 sidebar 配置的 collapsed 属性，只对文件夹生效
-   */
-  collapsed?: DefaultTheme.SidebarItem['collapsed']
 }
 
 /** 文件、文件夹时间戳信息 */
 export interface TimesInfo {
   /** 本地文件创建时间 */
-  localBirthTime?: number
+  localBirthTime: number
   /** 本地文件修改时间 */
-  localModifyTime?: number
+  localModifyTime: number
   /** git首次提交时间 */
-  firstCommitTime?: number
+  firstCommitTime: number
   /** git最后一次提交时间 */
-  lastCommitTime?: number
+  lastCommitTime: number
 }
 
-/** 文件、文件夹关键信息 */
-export interface ItemInfo {
-  /** 文件、文件夹名 */
+interface BaseInfo {
+  /**
+   * 文件、文件夹名
+   * @example 'index' | 'folder'
+   */
   name: string
-  /** 文件、文件夹时间戳信息 */
+  /**
+   * 路径
+   * @example '/a/b'
+   */
+  path: string
+  /**
+   * 文件、文件夹深度，从 0 开始（对应 srcDir）
+   */
+  depth: number
+  /**
+   * 文件、文件夹时间戳信息
+   * @remark
+   * 文件夹的 git 提交时间依赖于内部文件的提交时间
+   */
   timesInfo: TimesInfo
-  /** 文件、文件夹配置 */
-  config: ItemConfig
-  /** 是否是文件夹 */
-  isFolder: boolean
-  /** frontmatter 数据（仅文件存在） */
+}
+
+export interface FileInfo extends BaseInfo {
+  /** 文章内一级标题 */
+  h1: string
+  /** frontmatter 数据 */
   frontmatter: Recordable
-  /** 文章内标题（仅文件存在） */
-  articleTitle: string
-  /** 子文件、文件夹信息（仅文件夹存在） */
-  children: ItemInfo[]
+}
+
+export interface FolderInfo extends BaseInfo {
+  /** 子文件、文件夹信息 */
+  children: (FileInfo | FolderInfo)[]
 }
