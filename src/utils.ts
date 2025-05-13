@@ -1,5 +1,5 @@
 import type { DefaultTheme } from 'vitepress'
-import type { BaseInfo, FileInfo, FolderInfo, TimesInfo } from './types.js'
+import type { BaseInfo, FileInfo, FolderInfo, Handler, Item, ItemHandler, Recordable, TimesInfo } from './types.js'
 import { exec } from 'node:child_process'
 import { readFile, stat } from 'node:fs/promises'
 import { promisify } from 'node:util'
@@ -93,8 +93,8 @@ export function defaultComparer(a: BaseInfo, b: BaseInfo): number {
 
 /** 深度排序 */
 export function deepSrot(
-  list: (FileInfo | FolderInfo)[],
-  comparer: (a: FileInfo | FolderInfo, b: FileInfo | FolderInfo) => number,
+  list: Item[],
+  comparer: (a: Item, b: Item) => number,
 ): void {
   list.sort(comparer)
   for (const item of list) {
@@ -105,34 +105,31 @@ export function deepSrot(
 }
 
 /** 默认 sidebarItem 生成方法 */
-export function defaultSidebarItemHandler(
-  item: FileInfo | FolderInfo,
-  children: DefaultTheme.SidebarItem[] | undefined,
-): DefaultTheme.SidebarItem | false {
+export const defaultSidebarItemHandler: ItemHandler<DefaultTheme.SidebarItem> = (item, children) => {
   if (item.name === 'index')
     return false
 
+  const isFolder = (item as FolderInfo).children?.length
+  const hasIndex = (item as FolderInfo).children?.find(i => i.name === 'index')
+
   return {
     text: item.name,
-    link: item.path,
+    link: isFolder ? hasIndex ? item.path : undefined : item.path,
     items: children,
-    collapsed: false,
+    collapsed: isFolder ? false : undefined,
   }
 }
 
 /** 默认 navItem 生成方法 */
-export function defaultNavItemHandler(
-  item: FileInfo | FolderInfo,
-  children: (DefaultTheme.NavItemComponent | DefaultTheme.NavItemChildren | DefaultTheme.NavItemWithLink)[] | undefined,
-): DefaultTheme.NavItemWithLink | DefaultTheme.NavItemWithChildren | false {
+export const defaultNavItemHandler: ItemHandler<(DefaultTheme.NavItemWithLink | DefaultTheme.NavItemWithChildren)> = (item, children) => {
   const MAX_DEPTH = 1
   if (item.name === 'index' || item.depth > MAX_DEPTH)
     return false
 
   let link = item.path
-  if (children?.length && item.depth < MAX_DEPTH) {
+  if ((item as FolderInfo).children?.length) {
     // 文件夹判断是否有子 index 页面，没有则取第一个子页面
-    const index = (item as FolderInfo).children.findIndex(i => i.name === 'index')
+    const index = (item as FolderInfo).children.find(i => i.name === 'index')
     if (!index)
       link = (item as FolderInfo).children[0].path
   }
@@ -141,10 +138,30 @@ export function defaultNavItemHandler(
     ? {
         text: item.name,
         link,
-      }
+      } as DefaultTheme.NavItemWithLink
     : {
         text: item.name,
         items: children,
-        activeMatch: `^${item.path}$`,
-      }
+        activeMatch: `^${item.path}`,
+      } as DefaultTheme.NavItemWithChildren
+}
+
+export function deepHandle<T extends Recordable>(list: Item[], handler: ItemHandler<T>): T[] {
+  const result: T[] = []
+  for (const item of list) {
+    let children
+    if ((item as FolderInfo).children) {
+      children = deepHandle((item as FolderInfo).children, handler)
+    }
+    const res = handler(item, children)
+    if (res)
+      result.push(res)
+  }
+  return result
+}
+
+export const defaultHandler: Handler = (config, { nav, sidebar }) => {
+  config.vitepress.site.themeConfig.sidebar = sidebar
+  config.vitepress.site.themeConfig.nav = nav
+  return config
 }

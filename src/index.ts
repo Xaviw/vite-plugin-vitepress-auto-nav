@@ -1,11 +1,11 @@
 /* eslint-disable unused-imports/no-unused-vars */
 import type { Plugin, SiteConfig } from 'vitepress'
-import type { FileInfo, FolderInfo, Options } from './types.js'
+import type { FileInfo, FolderInfo, Item, Options } from './types.js'
 import { existsSync } from 'node:fs'
-import { mkdir, readFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { minimatch } from 'minimatch'
-import { deepSrot, defaultComparer, getArticleData, getTimestamp } from './utils.js'
+import { deepHandle, deepSrot, defaultComparer, defaultHandler, defaultNavItemHandler, defaultSidebarItemHandler, getArticleData, getTimestamp } from './utils.js'
 
 /**
  * vitepress 自动生成 sidebar 与 nav 配置的插件
@@ -15,13 +15,13 @@ import { deepSrot, defaultComparer, getArticleData, getTimestamp } from './utils
  */
 export default function ({
   exclude = [],
-  // navItemHandler = defaultNavItemHandler,
-  // sidebarItemHandler = defaultSidebarItemHandler,
+  navItemHandler = defaultNavItemHandler,
+  sidebarItemHandler = defaultSidebarItemHandler,
   comparer = defaultComparer,
-  handler,
+  handler = defaultHandler,
   summary,
 }: Options = {}): Plugin {
-  let infoCache: (FileInfo | FolderInfo)[] = []
+  let infoCache: Item[] = []
 
   return {
     name: 'vitepress-auto',
@@ -82,7 +82,7 @@ export default function ({
                 name,
                 path: isFile ? path.replace(/\.md$/, '') : path,
                 depth: index,
-              } as FileInfo | FolderInfo
+              } as Item
               current.push(item)
 
               const absolutePath = join(srcDir, path)
@@ -112,8 +112,11 @@ export default function ({
       // 数据排序
       deepSrot(infoCache, comparer)
 
-      let sidebar: any[]
-      // writeFile(join('./test.json'), JSON.stringify(infoCache, null, 2))
+      const sidebars = deepHandle(infoCache, sidebarItemHandler)
+      const navies = deepHandle(infoCache, navItemHandler)
+      writeFile(join('./test.json'), JSON.stringify({ sidebars, navies }, null, 2))
+
+      handler(config, { sidebar: sidebars, nav: navies })
     },
   }
 }
