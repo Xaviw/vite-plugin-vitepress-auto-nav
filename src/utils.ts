@@ -114,7 +114,7 @@ export const defaultSidebarItemHandler: ItemHandler<DefaultTheme.SidebarItem> = 
 
   return {
     text: item.name,
-    link: isFolder ? hasIndex ? item.path : undefined : item.path,
+    link: !isFolder || hasIndex ? item.path : undefined,
     items: children,
     collapsed: isFolder ? false : undefined,
   }
@@ -122,16 +122,14 @@ export const defaultSidebarItemHandler: ItemHandler<DefaultTheme.SidebarItem> = 
 
 /** 默认 navItem 生成方法 */
 export const defaultNavItemHandler: ItemHandler<(DefaultTheme.NavItemWithLink | DefaultTheme.NavItemWithChildren)> = (item, children) => {
-  const MAX_DEPTH = 1
+  const MAX_DEPTH = 0
   if (item.name === 'index' || item.depth > MAX_DEPTH)
     return false
 
   let link = item.path
+  // 文件夹时获取文件夹可用链接
   if ((item as FolderInfo).children?.length) {
-    // 文件夹判断是否有子 index 页面，没有则取第一个子页面
-    const index = (item as FolderInfo).children.find(i => i.name === 'index')
-    if (!index)
-      link = (item as FolderInfo).children[0].path
+    link = getFolderLink(item as FolderInfo)
   }
 
   return !children?.length || item.depth === MAX_DEPTH
@@ -146,6 +144,7 @@ export const defaultNavItemHandler: ItemHandler<(DefaultTheme.NavItemWithLink | 
       } as DefaultTheme.NavItemWithChildren
 }
 
+/** 调用 handler 生成 sidebar 或 nav */
 export function deepHandle<T extends Recordable>(list: Item[], handler: ItemHandler<T>): T[] {
   const result: T[] = []
   for (const item of list) {
@@ -160,8 +159,32 @@ export function deepHandle<T extends Recordable>(list: Item[], handler: ItemHand
   return result
 }
 
+/** 应用生成的数据到配置中 */
 export const defaultHandler: Handler = (config, { nav, sidebar }) => {
-  config.vitepress.site.themeConfig.sidebar = sidebar
+  config.vitepress.site.themeConfig.sidebar = sidebar.reduce<DefaultTheme.SidebarMulti>(
+    (p, c) => {
+      if (c.items?.length)
+        p[`/${c.text!}/`] = c.items
+      return p
+    },
+    {},
+  )
   config.vitepress.site.themeConfig.nav = nav
   return config
+}
+
+/**
+ * 获取文件夹对应的链接；
+ * 文件夹中存在 index.md 时，返回文件夹自身路径；否则深度查找第一篇 md 路径作为链接
+ */
+export function getFolderLink(item: FolderInfo): string {
+  const index = item.children.find(i => i.name === 'index')
+  if (index)
+    return `${item.path}/`
+
+  const md = item.children.find(i => (i as FileInfo).frontmatter)
+  if (md)
+    return md.path
+
+  return getFolderLink(item.children[0] as FolderInfo)
 }

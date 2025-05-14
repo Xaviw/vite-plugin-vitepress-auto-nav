@@ -3,8 +3,7 @@ layout: home
 
 hero:
   name: vite-plugin-vitepress-auto-nav
-  text: example
-  tagline: 测试项目
+  tagline: 插件测试
   actions:
     - theme: brand
       text: 1-1
