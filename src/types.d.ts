@@ -83,8 +83,8 @@ export interface Options<S extends Recordable = DefaultTheme.SidebarItem, N exte
   /**
    * 自定义排序方法，同级文件、文件夹会调用这个函数进行排序
    * @default
-   * ```js
-   * () => {
+   * ```ts
+   * (a, b) => {
    *    // 创建时间升序
    *    const timeA = a.timesInfo.firstCommitTime || a.timesInfo.localBirthTime
    *    const timeB = b.timesInfo.firstCommitTime || b.timesInfo.localBirthTime
@@ -100,13 +100,19 @@ export interface Options<S extends Recordable = DefaultTheme.SidebarItem, N exte
    * 第二个参数为子文件、文件夹生成的 sidebarItem 数组；
    * 返回 false 会忽略生成该项
    * @default
-   * ```js
+   * ```ts
    * (item, children) => {
-   *    if(item.name === 'index') return
+   *    if (item.name === 'index')
+   *      return false
+   *
+   *    const isFolder = (item as FolderInfo).children?.length
+   *    const hasIndex = (item as FolderInfo).children?.find(i => i.name === 'index')
+   *
    *    return {
    *      text: item.name,
-   *      link: item.path,
+   *      link: !isFolder || hasIndex ? item.path : undefined,
    *      items: children,
+   *      collapsed: isFolder ? false : undefined,
    *    }
    * }
    * ```
@@ -119,15 +125,27 @@ export interface Options<S extends Recordable = DefaultTheme.SidebarItem, N exte
    * 第二个参数为子文件、文件夹生成的 navItem 数组；
    * 返回 false 会忽略生成该项
    * @default
-   * ```js
+   * ```ts
    * (item, children) => {
-   *    if(item.name === 'index' || item.depth > 1) return
-   *    return {
-   *      text: item.name,
-   *      items: children,
-   *      link: item.path,
-   *      activeMatch
-   *    }
+   *   const MAX_DEPTH = 0
+   *   if (item.name === 'index' || item.depth > MAX_DEPTH)
+   *     return false
+   *
+   *   let link = item.path
+   *   if ((item as FolderInfo).children?.length) {
+   *     link = getFolderLink(item as FolderInfo)
+   *   }
+   *
+   *   return !children?.length || item.depth === MAX_DEPTH
+   *     ? {
+   *         text: item.name,
+   *         link,
+   *       } as DefaultTheme.NavItemWithLink
+   *     : {
+   *         text: item.name,
+   *         items: children,
+   *         activeMatch: `^${item.path}`,
+   *       } as DefaultTheme.NavItemWithChildren
    * }
    * ```
    */
@@ -137,10 +155,17 @@ export interface Options<S extends Recordable = DefaultTheme.SidebarItem, N exte
    * 解析得到 sidebar、nav 后合并到 vitepress 配置的方法（在不兼容 DefaultTheme 的主题中使用）
    * @default
    * ```ts
-   * (config, data) => {
-   *    config.vitepress.site.themeConfig.sidebar = data.sidebar
-   *    config.vitepress.site.themeConfig.nav = data.nav
-   *    return config
+   * (config, { nav, sidebar }) => {
+   *   config.vitepress.site.themeConfig.sidebar = sidebar.reduce<DefaultTheme.SidebarMulti>(
+   *     (p, c) => {
+   *       if (c.items?.length && c.text)
+   *         p[`/${c.text}/`] = c.items
+   *       return p
+   *     },
+   *     {},
+   *   )
+   *   config.vitepress.site.themeConfig.nav = nav
+   *   return config
    * }
    * ```
    */

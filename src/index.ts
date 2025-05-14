@@ -1,15 +1,29 @@
 import type { Plugin, SiteConfig } from 'vitepress'
-import type { FileInfo, FolderInfo, Item, Options } from './types.js'
+import type { FileInfo, FolderInfo, Item, Options } from './types'
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { minimatch } from 'minimatch'
-import { debounce, deepHandle, deepSrot, defaultComparer, defaultHandler, defaultNavItemHandler, defaultSidebarItemHandler, getArticleData, getTimestamp } from './utils.js'
+import { defaultComparer, legacyComparer } from './comparer'
+import { defaultHandler, defaultNavItemHandler, defaultSidebarItemHandler } from './handler'
+import { debounce, deepHandle, deepSort, getFolderLink, getMarkdownData, getTimestamp } from './utils'
+
+export {
+  defaultComparer,
+  defaultHandler,
+  defaultNavItemHandler,
+  defaultSidebarItemHandler,
+  getFolderLink,
+  getMarkdownData,
+  legacyComparer,
+}
+
+export type * from './types'
 
 /**
  * vitepress 自动生成 sidebar 与 nav 配置
  */
-export default function ({
+export function AutoNav({
   exclude = [],
   navItemHandler = defaultNavItemHandler,
   sidebarItemHandler = defaultSidebarItemHandler,
@@ -25,8 +39,8 @@ export default function ({
     name: 'vite-plugin-vitepress-auto-nav',
     configureServer({ watcher, restart }) {
       // 新增文件时，如果自动保存，会在 add 事件后触发 change 事件
-      // 删除文件夹时，每个子文件和子文件夹都会触发删除事件（顺序未知，似乎不固定）
-      // 修改配置文件会触发 change 事件，并且刷新；刷新过程中增加的临时文件同样会触发 add 事件（但不会触发其他事件）
+      // 删除文件夹时，每个子文件和子文件夹都会触发删除事件（顺序不固定）
+      // 修改配置文件会触发 change 事件，并且整体刷新（插件函数会重新运行）；刷新过程中可能会有临时文件触发 add 事件（但不会触发其他事件）
       // 非 srcDir 文件夹下，以及 .vitepress/cache 文件夹下的文件变化不会触发事件（被监听的文件引用的文件变化还是会触发事件）
       const debouncedRestart = debounce(restart, 1500)
       watcher.on('all', async (eventName, path) => {
@@ -63,7 +77,7 @@ export default function ({
               // 修改事件检查 frontmatter 是否变更
               else {
                 const { frontmatter, h1 } = current[targetIndex] as FileInfo
-                const newData = await getArticleData(path)
+                const newData = await getMarkdownData(path)
                 // frontmatter 未变更时，忽略
                 if (JSON.stringify({ frontmatter, h1 }) === JSON.stringify(newData))
                   return
@@ -87,9 +101,10 @@ export default function ({
       const {
         srcDir, // 系统绝对路径
         pages, // 基于 srcDir 配置的路径数组，例如 a.md、b/c.md
-        cacheDir,
-        root,
+        cacheDir, // 系统绝对路径
+        root, // 系统绝对路径
       } = config.vitepress as SiteConfig
+
       baseDir = srcDir.replace(/\\/g, '/')
       configDir = `${root.replace(/\\/g, '/')}/.vitepress`
 
@@ -122,30 +137,32 @@ export default function ({
           parts.forEach((part, index) => {
             const isFile = index === parts.length - 1
             const name = isFile ? part.replace(/\.md$/, '') : part
-            const itemPath = `/${parts.slice(0, index + 1).join('/')}`
-            let item = current.find(data => data.path === itemPath.replace(/\.md$/, ''))
+            const itemPath = `/${parts.slice(0, index).concat(name).join('/')}`
+            let item = current.find(data => data.path === itemPath)
 
             // 没有缓存才获取数据
             if (!item) {
               item = {
                 name,
-                path: isFile ? itemPath.replace(/\.md$/, '') : itemPath,
+                path: itemPath,
                 depth: index,
               } as Item
               current.push(item)
 
-              const absolutePath = join(srcDir, itemPath)
-              const e = getTimestamp(absolutePath).then((times) => {
-                item!.timesInfo = times
-              })
-              promises.push(e)
+              const absolutePath = join(srcDir, `${itemPath}.md`)
+              promises.push(
+                getTimestamp(absolutePath).then((times) => {
+                  item!.timesInfo = times
+                }),
+              )
 
               if (isFile) {
-                const e = getArticleData(absolutePath).then(({ h1, frontmatter }) => {
-                  (item as FileInfo).h1 = h1;
-                  (item as FileInfo).frontmatter = frontmatter
-                })
-                promises.push(e)
+                promises.push(
+                  getMarkdownData(absolutePath).then(({ h1, frontmatter }) => {
+                    (item as FileInfo).h1 = h1;
+                    (item as FileInfo).frontmatter = frontmatter
+                  }),
+                )
               }
               else {
                 (item as FolderInfo).children = []
@@ -159,9 +176,9 @@ export default function ({
       // 等待数据组装完成
       await Promise.allSettled(promises)
       // 数据缓存
-      writeFile(join(cacheDir, 'auto-nav-cache.json'), JSON.stringify(cache, null, 2))
+      writeFile(join(cacheDir, 'auto-nav-cache.json'), JSON.stringify(cache))
       // 数据排序
-      deepSrot(cache, comparer)
+      deepSort(cache, comparer)
       // 数据处理
       const sidebars = deepHandle(cache, sidebarItemHandler)
       const navies = deepHandle(cache, navItemHandler)
