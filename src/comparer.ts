@@ -16,7 +16,7 @@ export function defaultComparer(a: Item, b: Item): number {
  * @param options.config 自定义路径排序权重，键为路径，值为权重，例如 `{ '/a/b': 1 }`
  * @param options.order 排序顺序，默认 'asc' 升序
  */
-export function legacyComparer(
+export function classicComparer(
   {
     key = 'sort',
     config = {},

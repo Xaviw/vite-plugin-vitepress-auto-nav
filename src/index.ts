@@ -4,18 +4,19 @@ import { existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { minimatch } from 'minimatch'
-import { defaultComparer, legacyComparer } from './comparer'
-import { defaultHandler, defaultNavItemHandler, defaultSidebarItemHandler } from './handler'
+import { classicComparer, defaultComparer } from './comparer'
+import { classicSidebarItemHandler, defaultHandler, defaultNavItemHandler, defaultSidebarItemHandler } from './handler'
 import { debounce, deepHandle, deepSort, getFolderLink, getMarkdownData, getTimestamp } from './utils'
 
 export {
+  classicComparer,
+  classicSidebarItemHandler,
   defaultComparer,
   defaultHandler,
   defaultNavItemHandler,
   defaultSidebarItemHandler,
   getFolderLink,
   getMarkdownData,
-  legacyComparer,
 }
 
 export type * from './types'
@@ -31,6 +32,19 @@ export function AutoNav({
   handler = defaultHandler,
   // summary,
 }: Options = {}): Plugin {
+  if (typeof navItemHandler !== 'function') {
+    throw new TypeError('navItemHandler 必须是一个函数')
+  }
+  if (typeof sidebarItemHandler !== 'function') {
+    throw new TypeError('sidebarItemHandler 必须是一个函数')
+  }
+  if (typeof comparer !== 'function') {
+    throw new TypeError('comparer 必须是一个函数')
+  }
+  if (typeof handler !== 'function') {
+    throw new TypeError('handler 必须是一个函数')
+  }
+
   let cache: Item[] = []
   let baseDir: string
   let configDir: string
@@ -49,7 +63,7 @@ export function AutoNav({
           || !configDir
           || eventName === 'addDir' // 忽略新增目录，在新增文件时再处理
           || minimatch(path, `${configDir}/**/*`) // 忽略配置目录下的文件监听
-          || !minimatch(path, `${baseDir}/**/*`) // 忽略非 srcDir 目录下的文件监听
+          || !minimatch(path, `${baseDir}/**/*.md`) // 忽略非 srcDir 目录下 md 文件监听
         ) {
           return
         }
@@ -127,7 +141,15 @@ export function AutoNav({
       // 遍历文章
       pages
         .filter((path) => {
-          return !exclude.some(pattern => minimatch(path, pattern))
+          if (!Array.isArray(exclude))
+            return true
+
+          return !exclude.some((pattern) => {
+            if (typeof pattern !== 'string')
+              return false
+
+            return minimatch(path, pattern)
+          })
         })
         .forEach((path) => {
           let current = cache
@@ -180,10 +202,10 @@ export function AutoNav({
       // 数据排序
       deepSort(cache, comparer)
       // 数据处理
-      const sidebars = deepHandle(cache, sidebarItemHandler)
-      const navies = deepHandle(cache, navItemHandler)
+      const sidebar = deepHandle(cache, sidebarItemHandler)
+      const nav = deepHandle(cache, navItemHandler)
       // 修改配置
-      handler(config, { sidebar: sidebars, nav: navies })
+      handler(config, { sidebar, nav })
     },
   }
 }
