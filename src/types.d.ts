@@ -23,17 +23,19 @@ export interface TimesInfo {
 
 interface BaseInfo {
   /**
-   * 文件、文件夹名
-   * @example 'index' | 'folder'
+   * 文件、文件夹名（文件含扩展名 '.md'）
    */
   name: string
   /**
-   * 路径
-   * @example '/a/b'
+   * 访问链接，支持动态路由以及 rewrites（以 '/' 开头以及分隔，不含扩展名）
+   */
+  link: string
+  /**
+   * 原始路径，相对于 srcDir（以 '/' 开头以及分隔，文件含扩展名 '.md'）
    */
   path: string
   /**
-   * 文件、文件夹深度，从 0 开始（对应 srcDir）
+   * 原始路径深度，从 0 开始（对应 path 层级）
    */
   depth: number
   /**
@@ -45,6 +47,10 @@ interface BaseInfo {
 }
 
 export interface FileInfo extends BaseInfo {
+  /**
+   * 动态路由名称（含扩展名 '.md'）
+   */
+  dynamicName?: string
   /** 文章内一级标题 */
   h1: string
   /** frontmatter 数据 */
