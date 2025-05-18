@@ -13,7 +13,7 @@ export function defaultComparer(a: Item, b: Item): number {
  * @remark
  * 优先按自定义值排序，其次按首次 git 提交时间（或创建时间）排序
  * @param options.key md 文件使用的排序字段（从 frontmatter 中获取），默认 'sort'
- * @param options.config 自定义路径排序权重，键为路径，值为权重，例如 `{ '/a/b': 1 }`
+ * @param options.config 自定义路径排序权重，键为原始文件路径，值为权重，例如 `{ '/a/b': 1 }`
  * @param options.order 排序顺序，默认 'asc' 升序
  */
 export function classicComparer(

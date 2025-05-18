@@ -43,14 +43,17 @@ export async function getMarkdownData(path: string): Promise<Pick<FileInfo, 'h1'
  * getFolderLink(folderData) // 可能返回 `/folder/` 或 `/folder/sub/anyMd`
  * ```
  */
-export function getFolderLink(item: FolderInfo): string {
-  const index = item.children.find(i => i.name === 'index')
-  if (index || !item.children.length)
-    return `${item.path}/`
+export function getFolderLink(item: FolderInfo): string | undefined {
+  if (!item.children?.length)
+    return
 
-  const md = item.children.find(i => (i as FileInfo).frontmatter)
+  const index = item.children.find(i => i.name === 'index.md')
+  if (index)
+    return (index as FileInfo).link
+
+  const md = item.children.find(i => (i as FileInfo).link)
   if (md)
-    return md.path
+    return (md as FileInfo).link
 
   return getFolderLink(item.children[0] as FolderInfo)
 }

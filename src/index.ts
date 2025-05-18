@@ -180,32 +180,31 @@ export function AutoNav({
         })
         .forEach((path) => {
           let current = cache
-          const originPath = dynamicMapping[path]
+
+          const rewrite = map[path]
+
+          // 动态路由和原路由的层级肯定是一致的
+          const dynamicOrigin: string | undefined = dynamicMapping[path]
+          const dynamicOriginParts = dynamicOrigin?.split('/')
+
           // 遍历文章路径每一层
           const parts = path.split('/')
           parts.forEach((part, index) => {
             const isFile = index === parts.length - 1
+            const dynamicPath = dynamicOriginParts && `/${dynamicOriginParts.slice(0, index + 1).join('/')}`
             const itemPath = `/${parts.slice(0, index + 1).join('/')}`
-            let item = current.find(data => data.path === itemPath)
-
-            let link = isFile ? itemPath.replace(/\.md$/, '') : itemPath
-            if (isFile) {
-              const rewritePath = map[path]
-              if (rewritePath)
-                link = rewritePath.replace(/\.md$/, '')
-            }
+            let item = current.find(data => data.name === part)
 
             // 没有缓存才获取数据
             if (!item) {
               item = {
                 name: part,
-                path: isFile ? `/${originPath}` || itemPath : itemPath,
-                link,
+                path: dynamicPath || itemPath,
                 depth: index,
               } as Item
               current.push(item)
 
-              let absolutePath = join(srcDir, itemPath)
+              const absolutePath = join(srcDir, item.path)
               promises.push(
                 getTimestamp(absolutePath).then((times) => {
                   item!.timesInfo = times
@@ -213,10 +212,11 @@ export function AutoNav({
               )
 
               if (isFile) {
-                if (originPath) {
-                  absolutePath = join(srcDir, originPath)
-                  const dynamicName = basename(originPath);
-                  (item as FileInfo).dynamicName = dynamicName
+                (item as FileInfo).link = `/${(rewrite || path).replace(/(index)?\.md$/, '')}`
+
+                if (dynamicOrigin) {
+                  const originName = basename(dynamicOrigin);
+                  (item as FileInfo).originName = originName
                 }
                 promises.push(
                   getMarkdownData(absolutePath).then(({ h1, frontmatter }) => {

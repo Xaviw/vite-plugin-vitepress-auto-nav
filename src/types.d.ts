@@ -23,15 +23,11 @@ export interface TimesInfo {
 
 interface BaseInfo {
   /**
-   * 文件、文件夹名（文件含扩展名 '.md'）
+   * 文件、文件夹名（文件含扩展名 '.md'，动态路由为生成后的 name）
    */
   name: string
   /**
-   * 访问链接，支持动态路由以及 rewrites（以 '/' 开头以及分隔，不含扩展名）
-   */
-  link: string
-  /**
-   * 原始路径，相对于 srcDir（以 '/' 开头以及分隔，文件含扩展名 '.md'）
+   * 原始路径（非动态路由和 rewrite 路径），相对于 srcDir（以 '/' 开头以及分隔，文件含扩展名 '.md'）
    */
   path: string
   /**
@@ -48,9 +44,13 @@ interface BaseInfo {
 
 export interface FileInfo extends BaseInfo {
   /**
-   * 动态路由名称（含扩展名 '.md'）
+   * 访问链接，支持动态路由以及 rewrites（以 '/' 开头以及分隔，不含扩展名）
    */
-  dynamicName?: string
+  link: string
+  /**
+   * 动态路由的原始文件名称（含扩展名 '.md'）
+   */
+  originName?: string
   /** 文章内一级标题 */
   h1: string
   /** frontmatter 数据 */

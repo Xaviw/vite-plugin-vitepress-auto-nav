@@ -5,17 +5,17 @@ import { getFolderLink } from './utils'
 
 /** 默认 sidebarItem 生成方法 */
 export const defaultSidebarItemHandler: ItemHandler<DefaultTheme.SidebarItem> = (item, children) => {
-  if (item.name === 'index')
+  if (item.name === 'index.md')
     return false
 
-  const isFolder = (item as FolderInfo).children?.length
-  const hasIndex = (item as FolderInfo).children?.find(i => i.name === 'index')
+  const isFile = !!(item as FileInfo).link
+  const hasIndex = (item as FolderInfo).children?.find(i => i.name === 'index.md')
 
   return {
-    text: item.name,
-    link: !isFolder || hasIndex ? item.path : undefined,
+    text: item.name.replace(/\.md$/, ''),
+    link: isFile ? (item as FileInfo).link : (hasIndex as FileInfo)?.link,
     items: children,
-    collapsed: isFolder ? false : undefined,
+    collapsed: false,
   }
 }
 
@@ -34,7 +34,7 @@ interface ClassicSidebarItemHandlerOptions {
  * 兼容 v3 的 sidebarItem 生成方法
  * @remark
  * 文件支持在 frontmatter 中进行配置，优先级低于参数配置
- * @param options 键为 glob 表达式字符串，值为配置对象，例如 `{ '/a/b/*.md': { hide: true } }`
+ * @param options 键为 glob 表达式字符串，值为配置对象，例如 `{ '/a/b/*.md': { hide: true } }`,仅最后一条匹配的配置生效
  * @param frontmatterPrefix frontmatter 中配置属性的前缀，例如 `a_`，则会获取 `a_title` 作为自定义显示名称
  */
 export function classicSidebarItemHandler(
@@ -48,41 +48,45 @@ export function classicSidebarItemHandler(
     }) || []
 
     const hide = config.hide || frontmatter[`${frontmatterPrefix}hide`]
-    if (item.name === 'index' || hide)
+    if (item.name === 'index.md' || hide)
       return false
 
-    const isFolder = (item as FolderInfo).children?.length
-    const hasIndex = (item as FolderInfo).children?.find(i => i.name === 'index')
+    const isFile = !!(item as FileInfo).link
+    const hasIndex = (item as FolderInfo).children?.find(i => i.name === 'index.md')
 
     let text = config.title
-    if (!text && !isFolder && (config.useMarkdownTitle || frontmatter[`${frontmatterPrefix}useMarkdownTitle`])) {
+    if (!text && isFile && (config.useMarkdownTitle || frontmatter[`${frontmatterPrefix}useMarkdownTitle`])) {
       text = (item as FileInfo).h1
     }
 
     return {
-      text: text || item.name,
-      link: !isFolder || hasIndex ? item.path : undefined,
+      text: text || item.name.replace(/\.md$/, ''),
+      link: isFile ? (item as FileInfo).link : (hasIndex as FileInfo)?.link,
       items: children,
-      collapsed: isFolder ? config.collapsed || false : undefined,
+      collapsed: config.collapsed,
     }
   }
 }
 
-/** 默认 navItem 生成方法 */
+/**
+ * 默认 navItem 生成方法
+ * @remark
+ * 生成的 activeMatch 属性未处理存在 rewrites 的情况
+ */
 export const defaultNavItemHandler: ItemHandler<(DefaultTheme.NavItemWithLink | DefaultTheme.NavItemWithChildren)> = (item, children) => {
   const MAX_DEPTH = 0
-  if (item.name === 'index' || item.depth > MAX_DEPTH)
+  if (item.name === 'index.md' || item.depth > MAX_DEPTH)
     return false
 
-  let link = item.path
+  let link: string | undefined = (item as FileInfo).link
   // 文件夹时获取文件夹可用链接
-  if ((item as FolderInfo).children?.length) {
+  if (!link && (item as FolderInfo).children?.length) {
     link = getFolderLink(item as FolderInfo)
   }
 
   return !children?.length || item.depth === MAX_DEPTH
     ? {
-        text: item.name,
+        text: item.name.replace(/\.md$/, ''),
         link,
       } as DefaultTheme.NavItemWithLink
     : {
