@@ -117,7 +117,16 @@ export function deepHandle<T extends Recordable>(list: Item[], handler: ItemHand
   return result
 }
 
-/**  */
+/**
+ * 活动动态路由与源文件路径的映射
+ * @example
+ * ```ts
+ * {
+ *   'folder/a.md': 'folder/[name].md',
+ *   'folder/b.md': 'folder/[name].md',
+ * }
+ * ```
+ */
 export async function getDynamicMapping({
   srcDir,
   srcExclude,
@@ -174,6 +183,35 @@ export async function getDynamicMapping({
   }
 
   return mapping
+}
+
+/** 整理缓存，删除无用数据 */
+export function compactCache(cache: Item[], pages: string[]): void {
+  const parts = pages.reduce<string[][]>((p, c) => {
+    const names = c.split('/')
+    names.forEach((name, index) => {
+      if (!p[index])
+        p[index] = []
+
+      if (!p[index].includes(name))
+        p[index].push(name)
+    })
+    return p
+  }, [])
+
+  compact(cache)
+
+  function compact(current: Item[]): void {
+    for (let i = 0; i < current.length; i++) {
+      if (!parts[current[i].depth]?.includes(current[i].name)) {
+        current.splice(i, 1)
+        i--
+      }
+      else if ((current[i] as FolderInfo).children?.length) {
+        compact((current[i] as FolderInfo).children)
+      }
+    }
+  }
 }
 
 /**

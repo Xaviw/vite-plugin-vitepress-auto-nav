@@ -6,7 +6,7 @@ import { basename, join, normalize, sep } from 'node:path'
 import { minimatch } from 'minimatch'
 import { classicComparer, defaultComparer } from './comparer'
 import { classicSidebarItemHandler, defaultHandler, defaultNavItemHandler, defaultSidebarItemHandler } from './handler'
-import { debounce, deepHandle, deepSort, getDynamicMapping, getFolderLink, getMarkdownData, getTimestamp } from './utils'
+import { compactCache, debounce, deepHandle, deepSort, getDynamicMapping, getFolderLink, getMarkdownData, getTimestamp } from './utils'
 
 export {
   classicComparer,
@@ -22,7 +22,7 @@ export {
 export type * from './types'
 
 /**
- * vitepress 自动生成 sidebar 与 nav 配置
+ * vitepress 插件，自动生成 sidebar 与 nav 配置
  */
 export function AutoNav({
   exclude = [],
@@ -52,10 +52,12 @@ export function AutoNav({
 
   return {
     name: 'vite-plugin-vitepress-auto-nav',
-    // 新增文件时，如果自动保存，会在 add 事件后触发 change 事件
+    // 非 srcDir 文件夹下的内容不会被监听
+    // .vitepress 文件夹在 srcDir 文件夹内时，会被监听，反之不会（.vitepress/cache 文件夹始终不会被监听）
+    // 修改配置文件会触发整体刷新（插件函数会重新运行）；如果配置文件在 srcDir 文件夹内，还会触发 change 事件；刷新过程中 .vitepress 目录下还可能会有新增临时文件触发 add 事件（但没有后续的删除等事件）
+    // 被监听的文件引用的外部文件也会被监听
+    // 新增文件时，如果有自动保存，会在 add 事件后触发 change 事件
     // 删除文件夹时，每个子文件和子文件夹都会触发删除事件（顺序不固定）
-    // 修改配置文件会触发 change 事件，并且整体刷新（插件函数会重新运行）；刷新过程中可能会有临时文件触发 add 事件（但不会触发其他事件）
-    // 非 srcDir 文件夹下，以及 .vitepress/cache 文件夹下的文件变化不会触发事件（被监听的文件引用的文件变化还是会触发事件）
     configureServer({ watcher, restart }) {
       // 刷新防抖
       const debouncedRestart = debounce(restart, 1500)
@@ -161,6 +163,9 @@ export function AutoNav({
       // 全部动态路由
       const dynamicMapping = await getDynamicMapping({ srcDir, srcExclude: userConfig?.srcExclude })
 
+      // 整理历史缓存
+      compactCache(cache, pages)
+
       const promises: Promise<any>[] = []
 
       // 遍历文章
@@ -237,7 +242,7 @@ export function AutoNav({
       // 等待数据组装完成
       await Promise.allSettled(promises)
       // 数据缓存
-      writeFile(join(cacheDir, 'auto-nav-cache.json'), JSON.stringify(cache))
+      writeFile(join(cacheDir, 'auto-nav-cache.json'), JSON.stringify(cache, null, 2))
       // 数据排序
       deepSort(cache, comparer)
       // 数据处理
