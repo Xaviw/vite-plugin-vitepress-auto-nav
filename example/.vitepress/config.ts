@@ -4,7 +4,15 @@ import { AutoNav, classicComparer, classicSidebarItemHandler } from '../../src'
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   rewrites: {
-    '1-4/:any': 'test1/test2/:any',
+    '1-2/1-2-3/:any': 'test/:any',
+  },
+  locales: {
+    root: {
+      label: '简体中文',
+    },
+    en: {
+      label: 'English',
+    },
   },
   vite: {
     plugins: [

@@ -6,7 +6,7 @@ import { basename, join, normalize, sep } from 'node:path'
 import { minimatch } from 'minimatch'
 import { classicComparer, defaultComparer } from './comparer'
 import { classicSidebarItemHandler, defaultHandler, defaultNavItemHandler, defaultSidebarItemHandler } from './handler'
-import { compactCache, debounce, deepHandle, deepSort, getDynamicMapping, getFolderLink, getMarkdownData, getTimestamp } from './utils'
+import { compactCache, debounce, deepHandle, deepSort, getFolderLink, getMarkdownData, getTimestamp } from './utils'
 
 export {
   classicComparer,
@@ -21,9 +21,6 @@ export {
 
 export type * from './types'
 
-/**
- * vitepress 插件，自动生成 sidebar 与 nav 配置
- */
 export function AutoNav({
   exclude = [],
   navItemHandler = defaultNavItemHandler,
@@ -50,75 +47,71 @@ export function AutoNav({
   /** vitepress 配置文件夹，系统绝对路径 */
   let configDir: string
 
+  const CACHE_FILE = 'auto-nav-cache.json'
+
   return {
     name: 'vite-plugin-vitepress-auto-nav',
-    // 非 srcDir 文件夹下的内容不会被监听
-    // .vitepress 文件夹在 srcDir 文件夹内时，会被监听，反之不会（.vitepress/cache 文件夹始终不会被监听）
-    // 修改配置文件会触发整体刷新（插件函数会重新运行）；如果配置文件在 srcDir 文件夹内，还会触发 change 事件；刷新过程中 .vitepress 目录下还可能会有新增临时文件触发 add 事件（但没有后续的删除等事件）
-    // 被监听的文件引用的外部文件也会被监听
-    // 新增文件时，如果有自动保存，会在 add 事件后触发 change 事件
-    // 删除文件夹时，每个子文件和子文件夹都会触发删除事件（顺序不固定）
     configureServer({ watcher, restart }) {
-      // 刷新防抖
+      // 刷新添加防抖，避免批量操作时频繁触发刷新
       const debouncedRestart = debounce(restart, 1500)
 
+      // 非 srcDir 文件夹下的内容不会被监听
+      // .vitepress 文件夹在 srcDir 文件夹内时，会被监听，反之不会（.vitepress/cache 文件夹始终不会被监听）
+      // 修改配置文件会触发整体刷新（插件函数会重新运行）；如果配置文件在 srcDir 文件夹内，还会触发 change 事件；刷新过程中 .vitepress 目录下还可能会有新增临时文件触发 add 事件（但没有删除、修改等事件）
+      // 被监听的文件引用的外部文件也会被监听
+      // 新增文件时，如果有自动保存，会在 add 事件后触发 change 事件
+      // 删除文件夹时，每个子文件和子文件夹都会触发删除事件（顺序不固定）
       watcher.on('all', async (eventName, path) => {
         path = normalize(path)
+
+        const dynamicLoaderRe = /\.paths\.m?[jt]s$/
 
         if (
           !baseDir
           || !configDir
           || eventName === 'addDir' // 忽略新增目录，在新增文件时再处理
           || path.startsWith(configDir) // 忽略配置目录下的文件监听
-          || !(path.startsWith(baseDir) && path.endsWith('.md')) // 忽略非 srcDir 目录下 md 文件监听
+          || !path.startsWith(baseDir) // 忽略非 srcDir 目录下的文件监听
+          // 仅监听 md 文件与路径加载器文件
+          // 路径加载器引用了外部文件的情况未考虑
+          || !(path.endsWith('.md') || dynamicLoaderRe.test(path))
         ) {
           return
         }
 
-        // 修改和删除操作需要同步操作缓存
-        if (['change', 'unlink', 'unlinkDir'].includes(eventName)) {
+        // md 文件修改同步操作缓存，减少计算量
+        if (path.endsWith('.md') && eventName === 'change') {
           let current = cache
           const parts = path.replace(`${baseDir}${sep}`, '').split(sep)
 
           for (let i = 0; i < parts.length; i++) {
             const part = parts[i]
-            // 存在动态路由时，同级数据可能存在多个相同的 name
-            // 文件与文件夹可能同名，name 中通过 `.md` 进行区分
-            const targetIndex = current.findIndex(data => data.name === part)
+
+            // 同名文件、文件夹可以通过扩展名区分
+            // 动态路由文件通过 originName 匹配数据
+            const targetIndex = current.findIndex(data => (data as FileInfo).originName || data.name === part)
             if (targetIndex < 0)
               return
 
+            // 最后一层为 md 文件
             if (i === parts.length - 1) {
-              // 删除，存在动态路由时需要将对应的动态页面数据全部删除
-              if (['unlink', 'unlinkDir'].includes(eventName)) {
-                circularRemove(targetIndex)
-
-                function circularRemove(index: number): void {
-                  current.splice(index, 1)
-                  const newIndex = current.findIndex(data => data.name === part)
-                  if (newIndex >= 0)
-                    circularRemove(newIndex)
-                }
+              const { frontmatter, h1 } = current[targetIndex] as FileInfo
+              const newData = await getMarkdownData(path)
+              // frontmatter 未变更时，忽略
+              if (JSON.stringify({ frontmatter, h1 }) === JSON.stringify(newData)) {
+                return
               }
-              // change 事件只有可能是 md 文件触发，检查 frontmatter 是否变更
+              // 否则更新缓存数据，存在动态路由时需要将对应的动态页面数据全部更新
               else {
-                const { frontmatter, h1 } = current[targetIndex] as FileInfo
-                const newData = await getMarkdownData(path)
-                // frontmatter 未变更时，忽略
-                if (JSON.stringify({ frontmatter, h1 }) === JSON.stringify(newData)) {
-                  return
-                }
-                // 否则更新缓存数据，存在动态路由时需要将对应的动态页面数据全部更新
-                else {
-                  circularUpdate(targetIndex)
+                circularUpdate(targetIndex)
 
-                  function circularUpdate(index: number): void {
-                    (current[index] as FileInfo).frontmatter = newData.frontmatter;
-                    (current[index] as FileInfo).h1 = newData.h1
-                    const newIndex = current.slice(index + 1).findIndex(data => data.name === part)
-                    if (newIndex >= 0)
-                      circularUpdate(index + 1 + newIndex)
-                  }
+                function circularUpdate(index: number): void {
+                  (current[index] as FileInfo).frontmatter = newData.frontmatter;
+                  (current[index] as FileInfo).h1 = newData.h1
+                  // 循环更新动态路由生成的文件数据
+                  const newIndex = current.slice(index + 1).findIndex(data => (data as FileInfo).originName || data.name === part)
+                  if (newIndex >= 0)
+                    circularUpdate(index + 1 + newIndex)
                 }
               }
             }
@@ -128,20 +121,23 @@ export function AutoNav({
           }
         }
 
+        // 动态路由加载器变更，或 md 文件其他操作，直接刷新
         debouncedRestart()
       })
     },
-    // config 变更会自动刷新
+    // 刷新后会重新触发 config 钩子
     async config(config: any) {
       let {
-        srcDir, // 系统绝对路径
-        pages, // 全部页面路径数组，例如 a.md、b/c.md，包括动态路由
-        cacheDir, // 系统绝对路径
-        root, // 系统绝对路径
-        userConfig,
-        rewrites: { map }, // { map: { 'x/origin.md': 'x/rewrite.md' }, inv: { 'x/rewrite.md': 'x/origin.md' } }
+        srcDir, // D:/vite-plugin-vitepress-auto-nav/example
+        pages, // ['a.md', 'b/c.md']，包括动态路由，还未处理 rewrites
+        cacheDir, // D:/vite-plugin-vitepress-auto-nav/example/.vitepress/cache
+        root, // D:/vite-plugin-vitepress-auto-nav/example
+        rewrites, // { map: { 'x/origin.md': 'x/rewrite.md' }, inv: { 'x/rewrite.md': 'x/origin.md' } }
+        userConfig: { locales },
+        dynamicRoutes: { routes },
       } = config.vitepress as SiteConfig
 
+      // 记录关键配置并标准化路径
       baseDir = normalize(srcDir)
       configDir = join(root, '.vitepress')
       cacheDir = normalize(cacheDir)
@@ -152,29 +148,30 @@ export function AutoNav({
         if (!existsSync(cacheDir))
           await mkdir(cacheDir)
 
+        // 尝试读取缓存 JSON 数据
         try {
-          const cacheFile = join(cacheDir, 'auto-nav-cache.json')
+          const cacheFile = join(cacheDir, CACHE_FILE)
           const cacheStr = await readFile(cacheFile, 'utf-8')
           cache = JSON.parse(cacheStr)
         }
         catch { }
       }
 
-      // 全部动态路由
-      const dynamicMapping = await getDynamicMapping({ srcDir, srcExclude: userConfig?.srcExclude })
-
-      // 整理历史缓存
+      // 清理失效缓存
       compactCache(cache, pages)
 
+      // 暂存异步任务，后续 allSettled 等待，避免每单个任务都 await
       const promises: Promise<any>[] = []
 
       // 遍历文章
       pages
+        // 处理 exclude
         .filter((path) => {
           if (!Array.isArray(exclude))
             return true
 
-          const dynamicOrigin = dynamicMapping[path]
+          // exclude 需要判断动态路由的源路径
+          const dynamicOrigin = routes.find(data => data.path === path)?.route
 
           return !exclude.some((pattern) => {
             if (typeof pattern !== 'string')
@@ -183,46 +180,60 @@ export function AutoNav({
             return minimatch(dynamicOrigin || path, pattern)
           })
         })
+        // 收集数据
         .forEach((path) => {
           let current = cache
 
-          const rewrite = map[path]
+          // 路径可能存在 rewrite
+          const rewrite = rewrites.map[path]
 
           // 动态路由和原路由的层级肯定是一致的
-          const dynamicOrigin: string | undefined = dynamicMapping[path]
+          const dynamicRoute = routes.find(data => data.path === path)
+          const dynamicOrigin: string | undefined = dynamicRoute?.route
           const dynamicOriginParts = dynamicOrigin?.split('/')
 
           // 遍历文章路径每一层
           const parts = path.split('/')
           parts.forEach((part, index) => {
+            // 最后一层为 md 文件
             const isFile = index === parts.length - 1
+            // 当前层级路径
             const dynamicPath = dynamicOriginParts && `/${dynamicOriginParts.slice(0, index + 1).join('/')}`
             const itemPath = `/${parts.slice(0, index + 1).join('/')}`
+            // 查找缓存
             let item = current.find(data => data.name === part)
 
             // 没有缓存才获取数据
             if (!item) {
               item = {
                 name: part,
-                path: dynamicPath || itemPath,
+                path: dynamicPath || itemPath, // 动态路由存储原始 path
                 depth: index,
               } as Item
               current.push(item)
 
+              // 拼接系统路径
               const absolutePath = join(srcDir, item.path)
+
+              // 读取时间戳信息
               promises.push(
                 getTimestamp(absolutePath).then((times) => {
                   item!.timesInfo = times
                 }),
               )
 
+              // 文件数据
               if (isFile) {
-                (item as FileInfo).link = `/${(rewrite || path).replace(/(index)?\.md$/, '')}`
-
+                // 处理 rewrite 以及 index.md
+                (item as FileInfo).link = `/${(rewrite || path).replace(/(index)?\.md$/, '')}`;
+                // 动态路由存在 params 数据
+                (item as FileInfo).params = dynamicRoute?.params || {}
+                // 动态路由存储原始文件名
                 if (dynamicOrigin) {
                   const originName = basename(dynamicOrigin);
                   (item as FileInfo).originName = originName
                 }
+                // 读取 md 数据
                 promises.push(
                   getMarkdownData(absolutePath).then(({ h1, frontmatter }) => {
                     (item as FileInfo).h1 = h1;
@@ -230,6 +241,7 @@ export function AutoNav({
                   }),
                 )
               }
+              // 文件夹数据
               else {
                 (item as FolderInfo).children = []
               }
@@ -242,14 +254,14 @@ export function AutoNav({
       // 等待数据组装完成
       await Promise.allSettled(promises)
       // 数据缓存
-      writeFile(join(cacheDir, 'auto-nav-cache.json'), JSON.stringify(cache, null, 2))
+      writeFile(join(cacheDir, CACHE_FILE), JSON.stringify(cache, null, 2))
       // 数据排序
       deepSort(cache, comparer)
       // 数据处理
-      const sidebar = deepHandle(cache, sidebarItemHandler)
-      const nav = deepHandle(cache, navItemHandler)
+      const sidebar = deepHandle(cache, sidebarItemHandler, locales)
+      const nav = deepHandle(cache, navItemHandler, locales)
       // 修改配置
-      handler(config, { sidebar, nav })
+      handler(config, { sidebar, nav, rewrites, locales })
     },
   }
 }

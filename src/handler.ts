@@ -31,17 +31,17 @@ interface ClassicSidebarItemHandlerOptions {
 }
 
 /**
- * 兼容 v3 的 sidebarItem 生成方法
+ * 部分兼容 v3 的 sidebarItem 生成方法
  * @remark
  * 文件支持在 frontmatter 中进行配置，优先级低于参数配置
  * @param options 键为 glob 表达式字符串，值为配置对象，例如 `{ '/a/b/*.md': { hide: true } }`,仅最后一条匹配的配置生效
- * @param frontmatterPrefix frontmatter 中配置属性的前缀，例如 `a_`，则会获取 `a_title` 作为自定义显示名称
+ * @param frontmatterPrefix frontmatter 中配置属性的前缀，例如设置为 `a_`，则会获取 `a_title` 作为自定义显示名称
  */
 export function classicSidebarItemHandler(
   options: Record<string, ClassicSidebarItemHandlerOptions> = {},
   frontmatterPrefix: string = '',
-): ItemHandler<DefaultTheme.SidebarItem> {
-  return (item, children) => {
+): ItemHandler<DefaultTheme.SidebarItem | DefaultTheme.SidebarMulti> {
+  return (item, children, locales) => {
     const frontmatter = (item as FileInfo).frontmatter || {}
     const [_, config = {}] = Object.entries(options).reverse().find(([pattern]) => {
       return minimatch(item.path, pattern)
@@ -58,12 +58,18 @@ export function classicSidebarItemHandler(
     if (!text && isFile && (config.useMarkdownTitle || frontmatter[`${frontmatterPrefix}useMarkdownTitle`])) {
       text = (item as FileInfo).h1
     }
-
-    return {
-      text: text || item.name.replace(/\.md$/, ''),
-      link: isFile ? (item as FileInfo).link : (hasIndex as FileInfo)?.link,
-      items: children,
-      collapsed: config.collapsed,
+    if (locales ? item.depth === 1 : item.depth === 0) {
+      return {
+        [`${item.path.replace(/\.md$/, '')}/`]: children,
+      }
+    }
+    else {
+      return {
+        text: text || item.name.replace(/\.md$/, ''),
+        link: isFile ? (item as FileInfo).link : (hasIndex as FileInfo)?.link,
+        items: children,
+        collapsed: config.collapsed,
+      }
     }
   }
 }
@@ -73,8 +79,8 @@ export function classicSidebarItemHandler(
  * @remark
  * 生成的 activeMatch 属性未处理存在 rewrites 的情况
  */
-export const defaultNavItemHandler: ItemHandler<(DefaultTheme.NavItemWithLink | DefaultTheme.NavItemWithChildren)> = (item, children) => {
-  const MAX_DEPTH = 0
+export const defaultNavItemHandler: ItemHandler<DefaultTheme.NavItemWithLink | DefaultTheme.NavItemWithChildren> = (item, children, locales) => {
+  const MAX_DEPTH = locales ? 1 : 0
   if (item.name === 'index.md' || item.depth > MAX_DEPTH)
     return false
 
@@ -88,6 +94,7 @@ export const defaultNavItemHandler: ItemHandler<(DefaultTheme.NavItemWithLink | 
     ? {
         text: item.name.replace(/\.md$/, ''),
         link,
+        activeMatch: `^${item.path}`,
       } as DefaultTheme.NavItemWithLink
     : {
         text: item.name,
@@ -97,15 +104,49 @@ export const defaultNavItemHandler: ItemHandler<(DefaultTheme.NavItemWithLink | 
 }
 
 /** 应用生成的数据到配置中 */
-export const defaultHandler: Handler = (config, { nav, sidebar }) => {
-  config.vitepress.site.themeConfig.sidebar = sidebar.reduce<DefaultTheme.SidebarMulti>(
-    (p, c) => {
-      if (c.items?.length && c.text)
-        p[`/${c.text}/`] = c.items
-      return p
-    },
-    {},
-  )
-  config.vitepress.site.themeConfig.nav = nav
+export const defaultHandler: Handler = (config, { nav, sidebar, rewrites: { map }, locales }) => {
+  if (locales) {
+    const langs = Object.keys(locales)
+    langs.forEach((lang) => {
+      if (!config.vitepress.site.locales[lang].themeConfig)
+        config.vitepress.site.locales[lang].themeConfig = {}
+
+      const sidebarData = sidebar.find((item) => {
+        if (lang === 'root') {
+          return !langs.includes((item as DefaultTheme.SidebarItem).text!)
+        }
+        return item.text === lang
+      })?.items
+      config.vitepress.site.locales[lang].themeConfig.sidebar = (sidebarData as DefaultTheme.SidebarMulti[]).reduce((p, c) => {
+        const [base, items] = Object.entries(c)[0]
+        p[base] = items
+        return p
+      }, {})
+
+      const navData = nav.find((item) => {
+        if (lang === 'root') {
+          return !langs.includes((item as DefaultTheme.NavItemWithChildren).text!)
+        }
+        return item.text === lang
+      })?.items
+      config.vitepress.site.locales[lang].themeConfig.nav = navData
+    })
+  }
+  else {
+    config.vitepress.site.themeConfig.sidebar = sidebar.reduce<DefaultTheme.SidebarMulti>(
+      (p, c) => {
+        const [base, items] = Object.entries(c)[0]
+        for (const [origin, rewrite] of Object.entries(map)) {
+          if (origin.startsWith(base.slice(1)) && rewrite) {
+            p[rewrite.replace(/\.md$/, '')] = items
+          }
+        }
+        return { ...p, ...c as DefaultTheme.SidebarMulti }
+      },
+      {},
+    )
+
+    config.vitepress.site.themeConfig.nav = nav
+  }
   return config
 }

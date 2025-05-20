@@ -1,5 +1,5 @@
 import type { UserConfig } from 'vite'
-import type { DefaultTheme, SiteConfig } from 'vitepress'
+import type { DefaultTheme, LocaleConfig, SiteConfig } from 'vitepress'
 
 export type Recordable = Record<string, any>
 
@@ -55,6 +55,8 @@ export interface FileInfo extends BaseInfo {
   h1: string
   /** frontmatter 数据 */
   frontmatter: Recordable
+  /** 动态路由 params */
+  params: Recordable
 }
 
 export interface FolderInfo extends BaseInfo {
@@ -68,16 +70,23 @@ export type Comparer = (a: Item, b: Item) => number
 
 export type ItemHandler<T extends Recordable = Recordable> = (
   item: Item,
-  children?: T[] | undefined
+  children: T[] | undefined,
+  locales?: LocaleConfig,
 ) => T | false
 
-export type Handler<S extends Recordable = DefaultTheme.SidebarItem, N extends Recordable = (DefaultTheme.NavItemWithLink | DefaultTheme.NavItemWithChildren)> = (
+export type Handler<
+  S extends Recordable = DefaultTheme.SidebarItem | DefaultTheme.SidebarMulti,
+  N extends Recordable = DefaultTheme.NavItemWithLink | DefaultTheme.NavItemWithChildren,
+> = (
   config: VitepressUserConfig,
-  data: { sidebar: S[], nav: N[] }
+  data: { sidebar: S[], nav: N[], rewrites: SiteConfig['rewrites'], locales?: LocaleConfig }
 ) => MaybePromise<Omit<VitepressUserConfig, 'plugins'>>
 
 /** 插件配置项 */
-export interface Options<S extends Recordable = DefaultTheme.SidebarItem, N extends Recordable = (DefaultTheme.NavItemWithLink | DefaultTheme.NavItemWithChildren)> {
+export interface Options<
+  S extends Recordable = DefaultTheme.SidebarItem | DefaultTheme.SidebarMulti,
+  N extends Recordable = DefaultTheme.NavItemWithLink | DefaultTheme.NavItemWithChildren,
+> {
   /**
    * glob 表达式字符串数组，用于排除某些文件或文件夹
    * @remark

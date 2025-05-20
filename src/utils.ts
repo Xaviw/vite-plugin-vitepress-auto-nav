@@ -1,12 +1,9 @@
+import type { LocaleConfig } from 'vitepress'
 import type { FileInfo, FolderInfo, Item, ItemHandler, Recordable, TimesInfo } from './types'
 import { exec } from 'node:child_process'
-import { existsSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
-import { normalize, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import fm from 'front-matter'
-import { glob } from 'tinyglobby'
-import { loadConfigFromFile } from 'vite'
 
 /**
  * 获取 md 文件的 frontmatter 及 h1
@@ -103,86 +100,18 @@ export function deepSort(
 }
 
 /** 调用 handler 生成 sidebar 或 nav */
-export function deepHandle<T extends Recordable>(list: Item[], handler: ItemHandler<T>): T[] {
+export function deepHandle<T extends Recordable>(list: Item[], handler: ItemHandler<T>, locales?: LocaleConfig): T[] {
   const result: T[] = []
   for (const item of list) {
     let children
     if ((item as FolderInfo).children) {
-      children = deepHandle((item as FolderInfo).children, handler)
+      children = deepHandle((item as FolderInfo).children, handler, locales)
     }
-    const res = handler(item, children)
+    const res = handler(item, children, locales)
     if (res)
       result.push(res)
   }
   return result
-}
-
-/**
- * 活动动态路由与源文件路径的映射
- * @example
- * ```ts
- * {
- *   'folder/a.md': 'folder/[name].md',
- *   'folder/b.md': 'folder/[name].md',
- * }
- * ```
- */
-export async function getDynamicMapping({
-  srcDir,
-  srcExclude,
-}: { srcDir: string, srcExclude?: string[] }): Promise<Record<string, string>> {
-  const mapping: Record<string, string> = {}
-  const dynamicRouteRE = /\[(\w+)\]/g
-
-  // 获取所有动态路由
-  const dynamicRoutes = (await glob(['**/*.md'], {
-    cwd: srcDir,
-    ignore: [
-      '**/node_modules/**',
-      '**/dist/**',
-      ...(srcExclude || []),
-    ],
-    expandDirectories: false,
-  })).filter(path => dynamicRouteRE.test(path))
-
-  for (const route of dynamicRoutes) {
-    const fullPath = normalize(resolve(srcDir, route))
-
-    // 查找对应的路径加载器文件
-    const paths = ['js', 'ts', 'mjs', 'mts'].map(ext =>
-      fullPath.replace(/\.md$/, `.paths.${ext}`),
-    )
-    const pathsFile = paths.find(p => existsSync(p))
-    if (!pathsFile)
-      continue
-
-    // 获取路径加载器
-    const mod = await loadConfigFromFile(
-      {} as any,
-      pathsFile,
-      undefined,
-      'silent',
-    )
-    if (!mod)
-      continue
-
-    // 执行路径加载器
-    const { paths: loader } = mod.config as any
-    if (typeof loader !== 'function')
-      continue
-    const pathsData: { params: Recordable }[] = await loader()
-
-    // 生成路径
-    pathsData.forEach((userConfig) => {
-      const resolvedPath = route.replace(
-        dynamicRouteRE,
-        (_, key) => userConfig.params[key],
-      )
-      mapping[resolvedPath] = route
-    })
-  }
-
-  return mapping
 }
 
 /** 整理缓存，删除无用数据 */
