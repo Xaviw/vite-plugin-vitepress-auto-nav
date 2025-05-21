@@ -150,7 +150,10 @@ export function AutoNav({
         try {
           const cacheFile = join(cacheDir, CACHE_FILE)
           const cacheStr = await readFile(cacheFile, 'utf-8')
-          cache = JSON.parse(cacheStr)
+          const cacheData = JSON.parse(cacheStr)
+          // rewrites 会影响 link 属性，如果变更需要重新获取数据
+          if (JSON.stringify(cacheData.rewrites) === JSON.stringify(rewrites))
+            cache = cacheData.cache
         }
         catch { }
       }

@@ -25,18 +25,17 @@ export default defineConfig({
             '**/1-2': 0,
           },
         }),
-        sidebarItemHandler: sidebarItemHandler(
-          {
+        sidebarItemHandler: sidebarItemHandler({
+          config: {
             '**/1-2/1-2-3': { collapsed: false },
           },
-        ),
-        navItemHandler: navItemHandler(
-          {
+        }),
+        navItemHandler: navItemHandler({
+          config: {
             '**/1-4': { hide: true },
           },
-          undefined,
-          1,
-        ),
+          depth: 1,
+        }),
       }),
     ],
   },

@@ -16,33 +16,39 @@ interface ItemHandlerOptions {
  * 部分兼容 v3 的 sidebarItem 生成方法
  * @remark
  * 文件支持在 frontmatter 中进行配置，优先级低于参数配置，设置 frontmatterPrefix 可以避免影响原有参数。
- * @param options 键为 glob 表达式字符串（通过 [minimatch](https://github.com/isaacs/minimatch) 进行判断，仅最后一条匹配的配置生效；键需要以页面实际访问路径为准，文件需要包含扩展名 '.md'），值为配置对象，例如 `{ '/a/b/*.md': { hide: true } }`
- * @param frontmatterPrefix frontmatter 中配置属性的前缀（不影响 options 配置中的属性名），例如设置为 `a_`，则会从 frontmatter 中获取 `a_title` 作为自定义显示名称
+ * @param options
+ * @param options.config 键为 glob 表达式字符串（通过 [minimatch](https://github.com/isaacs/minimatch) 进行判断，仅最后一条匹配的配置生效；键需要以页面实际访问路径为准，文件需要包含扩展名 '.md'），值为配置对象，例如 `{ '/a/b/*.md': { hide: true } }`
+ * @param options.frontmatterPrefix frontmatter 中配置属性的前缀（不影响 options 配置中的属性名），例如设置为 `a_`，则会从 frontmatter 中获取 `a_title` 作为自定义显示名称
  */
 export function sidebarItemHandler(
-  options: Record<string, ItemHandlerOptions & {
-    /** 同 DefaultTheme.SidebarItem.collapsed，仅文件夹生效 */
-    collapsed?: boolean
-  }> = {},
-  frontmatterPrefix: string = '',
+  {
+    config = {},
+    frontmatterPrefix = '',
+  }: {
+    config?: Record<string, ItemHandlerOptions & {
+      /** 同 DefaultTheme.SidebarItem.collapsed，仅文件夹生效 */
+      collapsed?: boolean
+    }>
+    frontmatterPrefix?: string
+  } = {},
 ): ItemHandler<DefaultTheme.SidebarItem | DefaultTheme.SidebarMulti> {
   return ({ item, children, locales, rewrites }) => {
     const isFile = !!(item as FileInfo).link
 
     const frontmatter = (item as FileInfo).frontmatter || {}
 
-    const [_, config = {}] = Object.entries(options).reverse().find(([pattern]) => {
+    const [_, options = {}] = Object.entries(config).reverse().find(([pattern]) => {
       return minimatch(isFile ? `${(item as FileInfo).link}.md` : item.path, pattern)
     }) || []
 
-    const hide = config.hide || frontmatter[`${frontmatterPrefix}hide`]
+    const hide = options.hide || frontmatter[`${frontmatterPrefix}hide`]
     if (item.name === 'index.md' || hide)
       return false
 
     const hasIndex = (item as FolderInfo).children?.find(i => i.name === 'index.md')
 
-    let title = config.title || frontmatter[`${frontmatterPrefix}title`]
-    if (!title && isFile && (config.useMarkdownTitle || frontmatter[`${frontmatterPrefix}useMarkdownTitle`])) {
+    let title = options.title || frontmatter[`${frontmatterPrefix}title`]
+    if (!title && isFile && (options.useMarkdownTitle || frontmatter[`${frontmatterPrefix}useMarkdownTitle`])) {
       title = (item as FileInfo).h1
     }
 
@@ -72,7 +78,7 @@ export function sidebarItemHandler(
         text: title || item.name.replace(/\.md$/, ''),
         link: isFile ? (item as FileInfo).link : (hasIndex as FileInfo)?.link,
         items: children,
-        collapsed: config.collapsed,
+        collapsed: options.collapsed,
       }
     }
   }
@@ -81,14 +87,21 @@ export function sidebarItemHandler(
  * 部分兼容 v3 的 navItem 生成方法
  * @remark
  * 文件支持在 frontmatter 中进行配置，优先级低于参数配置，设置 frontmatterPrefix 可以避免影响原有参数。
- * @param options 键为 glob 表达式字符串（通过 [minimatch](https://github.com/isaacs/minimatch) 进行判断，仅最后一条匹配的配置生效；键需要以页面实际访问路径为准，文件需要包含扩展名 '.md'），值为配置对象，例如 `{ '/a/b/*.md': { hide: true } }`
- * @param frontmatterPrefix frontmatter 中配置属性的前缀（不影响 options 配置中的属性名），例如设置为 `a_`，则会从 frontmatter 中获取 `a_title` 作为自定义显示名称
- * @param depth 最大显示层级（从 0 开始，存在国际化配置时会忽略首层），默认为 0
+ * @param options
+ * @param options.config 键为 glob 表达式字符串（通过 [minimatch](https://github.com/isaacs/minimatch) 进行判断，仅最后一条匹配的配置生效；键需要以页面实际访问路径为准，文件需要包含扩展名 '.md'），值为配置对象，例如 `{ '/a/b/*.md': { hide: true } }`
+ * @param options.frontmatterPrefix frontmatter 中配置属性的前缀（不影响 options 配置中的属性名），例如设置为 `a_`，则会从 frontmatter 中获取 `a_title` 作为自定义显示名称
+ * @param options.depth 最大显示层级（从 0 开始，存在国际化配置时会忽略首层），默认为 0
  */
 export function navItemHandler(
-  options: Record<string, ItemHandlerOptions> = {},
-  frontmatterPrefix: string = '',
-  depth: number = 0,
+  {
+    config = {},
+    frontmatterPrefix = '',
+    depth = 0,
+  }: {
+    config?: Record<string, ItemHandlerOptions>
+    frontmatterPrefix?: string
+    depth?: number
+  } = {},
 ): ItemHandler<DefaultTheme.NavItemWithLink | DefaultTheme.NavItemWithChildren> {
   return ({ item, children, locales, rewrites: _rewrites }) => {
     const MAX_DEPTH = depth + (locales ? 1 : 0)
@@ -96,16 +109,16 @@ export function navItemHandler(
 
     const frontmatter = (item as FileInfo).frontmatter || {}
 
-    const [_, config = {}] = Object.entries(options).reverse().find(([pattern]) => {
+    const [_, options = {}] = Object.entries(config).reverse().find(([pattern]) => {
       return minimatch(isFile ? `${(item as FileInfo).link}.md` : item.path, pattern)
     }) || []
 
-    const hide = config.hide || frontmatter[`${frontmatterPrefix}hide`]
+    const hide = options.hide || frontmatter[`${frontmatterPrefix}hide`]
     if (item.name === 'index.md' || hide || item.depth > MAX_DEPTH)
       return false
 
-    let title = config.title || frontmatter[`${frontmatterPrefix}title`]
-    if (!title && isFile && (config.useMarkdownTitle || frontmatter[`${frontmatterPrefix}useMarkdownTitle`])) {
+    let title = options.title || frontmatter[`${frontmatterPrefix}title`]
+    if (!title && isFile && (options.useMarkdownTitle || frontmatter[`${frontmatterPrefix}useMarkdownTitle`])) {
       title = (item as FileInfo).h1
     }
 
@@ -150,18 +163,35 @@ export const handler: Handler = (config, { nav, sidebar, locales }) => {
         config.vitepress.site.locales[lang].themeConfig = {}
 
       // 从 sidebar 数据中找到对应语言的 items 配置
-      const sidebarData = sidebar.find((item) => {
-        // root 对应根目录存在但是语言配置中不存在的名称
-        if (lang === 'root') {
-          return !langs.includes((item as DefaultTheme.SidebarItem).text!)
-        }
-        return item.text === lang
-      })?.items as DefaultTheme.SidebarMulti[] | undefined
+      // root 对应所有以非 lang 标签开头的路径
+      let sidebarData: DefaultTheme.SidebarMulti[] | undefined
+      if (lang === 'root') {
+        sidebarData = (sidebar as DefaultTheme.SidebarItem[]).reduce<DefaultTheme.SidebarMulti[]>((p, c) => {
+          if (!langs.includes((c as DefaultTheme.SidebarItem).text!))
+            return [...p, ...(c.items as DefaultTheme.SidebarMulti[])]
+          return p
+        }, [])
+      }
+      else {
+        sidebarData = sidebar.find(item => item.text === lang)?.items as DefaultTheme.SidebarMulti[] | undefined
+      }
 
       // 合并每一条 SidebarMulti 并应用
       if (sidebarData?.length) {
         config.vitepress.site.locales[lang].themeConfig.sidebar = sidebarData.reduce((p, c) => {
-          return { ...p, ...c }
+          // 存在某个语言下路径被映射到非该语言路径的情况，此时需要将配置写入目标语言配置或 root 配置
+          for (const [prefix, items] of Object.entries(c)) {
+            // 非该语言标签开头的路径映射到 root 下
+            if (lang !== 'root' && !prefix.startsWith(`/${lang}/`)) {
+              if (!config.vitepress.site.locales.root.themeConfig)
+                config.vitepress.site.locales.root.themeConfig = {}
+              config.vitepress.site.locales.root.themeConfig.sidebar[prefix] = items
+            }
+            else {
+              p[prefix] = items
+            }
+          }
+          return p
         }, {})
       }
 
