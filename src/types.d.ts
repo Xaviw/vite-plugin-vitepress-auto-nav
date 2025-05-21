@@ -27,7 +27,7 @@ interface BaseInfo {
    */
   name: string
   /**
-   * 原始路径（非动态路由和 rewrite 路径），相对于 srcDir（以 '/' 开头以及分隔，文件含扩展名 '.md'）
+   * 原始路径，相对于 srcDir（以 '/' 开头以及分隔，文件含扩展名 '.md'）
    */
   path: string
   /**
@@ -69,9 +69,7 @@ export type Item = FileInfo | FolderInfo
 export type Comparer = (a: Item, b: Item) => number
 
 export type ItemHandler<T extends Recordable = Recordable> = (
-  item: Item,
-  children: T[] | undefined,
-  locales?: LocaleConfig,
+  options: { item: Item, children: T[] | undefined, locales?: LocaleConfig, rewrites: SiteConfig['rewrites'] }
 ) => T | false
 
 export type Handler<
@@ -90,6 +88,7 @@ export interface Options<
   /**
    * glob 表达式字符串数组，用于排除某些文件或文件夹
    * @remark
+   * 通过 [minimatch](https://github.com/isaacs/minimatch) 进行判断；
    * 排除的页面还是能够通过链接访问，如果希望彻底排除，请使用 vitepress 的 srcExclude 配置；
    * 空文件夹始终会被排除
    */
@@ -97,92 +96,27 @@ export interface Options<
 
   /**
    * 自定义排序方法，同级文件、文件夹会调用这个函数进行排序
-   * @default
-   * ```ts
-   * (a, b) => {
-   *    // 创建时间升序
-   *    const timeA = a.timesInfo.firstCommitTime || a.timesInfo.localBirthTime
-   *    const timeB = b.timesInfo.firstCommitTime || b.timesInfo.localBirthTime
-   *    return timeA - timeB
-   * }
-   * ```
    */
   comparer?: Comparer
 
   /**
    * 每一项文件或文件夹生成为 sidebarItem 的方法
    * @remark
-   * 第二个参数为子文件、文件夹生成的 sidebarItem 数组；
+   * 参数 children 属性为子文件、文件夹生成的 sidebarItem 数组；
    * 返回 false 会忽略生成该项
-   * @default
-   * ```ts
-   * (item, children) => {
-   *    if (item.name === 'index')
-   *      return false
-   *
-   *    const isFolder = (item as FolderInfo).children?.length
-   *    const hasIndex = (item as FolderInfo).children?.find(i => i.name === 'index')
-   *
-   *    return {
-   *      text: item.name,
-   *      link: !isFolder || hasIndex ? item.path : undefined,
-   *      items: children,
-   *      collapsed: isFolder ? false : undefined,
-   *    }
-   * }
-   * ```
    */
   sidebarItemHandler?: ItemHandler<S>
 
   /**
    * 每一项文件或文件夹生成为 navItem 的方法
    * @remark
-   * 第二个参数为子文件、文件夹生成的 navItem 数组；
+   * 参数 children 属性为子文件、文件夹生成的 navItem 数组；
    * 返回 false 会忽略生成该项
-   * @default
-   * ```ts
-   * (item, children) => {
-   *   const MAX_DEPTH = 0
-   *   if (item.name === 'index' || item.depth > MAX_DEPTH)
-   *     return false
-   *
-   *   let link = item.path
-   *   if ((item as FolderInfo).children?.length) {
-   *     link = getFolderLink(item as FolderInfo)
-   *   }
-   *
-   *   return !children?.length || item.depth === MAX_DEPTH
-   *     ? {
-   *         text: item.name,
-   *         link,
-   *       } as DefaultTheme.NavItemWithLink
-   *     : {
-   *         text: item.name,
-   *         items: children,
-   *         activeMatch: `^${item.path}`,
-   *       } as DefaultTheme.NavItemWithChildren
-   * }
-   * ```
    */
   navItemHandler?: ItemHandler<N>
 
   /**
-   * 解析得到 sidebar、nav 后合并到 vitepress 配置的方法（在不兼容 DefaultTheme 的主题中使用）
-   * @default
-   * ```ts
-   * (config, { nav, sidebar }) => {
-   *   config.vitepress.site.themeConfig.sidebar = sidebar.reduce<DefaultTheme.SidebarMulti>(
-   *     (p, c) => {
-   *       if (c.items?.length && c.text)
-   *         p[`/${c.text}/`] = c.items
-   *       return p
-   *     },
-   *     {},
-   *   )
-   *   config.vitepress.site.themeConfig.nav = nav
-   *   return config
-   * }
-   * ```
+   * 解析得到 sidebar、nav 后合并到 vitepress 配置的方法
    */
   handler?: Handler<S, N>
 

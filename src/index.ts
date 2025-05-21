@@ -4,13 +4,11 @@ import { existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { basename, join, normalize, sep } from 'node:path'
 import { minimatch } from 'minimatch'
-import { classicComparer, defaultComparer } from './comparer'
-import { classicSidebarItemHandler, defaultHandler, defaultNavItemHandler, defaultSidebarItemHandler } from './handler'
+import { comparer as defaultComparer } from './comparer'
+import { handler as defaultHandler, navItemHandler as defaultNavItemHandler, sidebarItemHandler as defaultSidebarItemHandler } from './handler'
 import { compactCache, debounce, deepHandle, deepSort, getFolderLink, getMarkdownData, getTimestamp } from './utils'
 
 export {
-  classicComparer,
-  classicSidebarItemHandler,
   defaultComparer,
   defaultHandler,
   defaultNavItemHandler,
@@ -23,9 +21,9 @@ export type * from './types'
 
 export function AutoNav({
   exclude = [],
-  navItemHandler = defaultNavItemHandler,
-  sidebarItemHandler = defaultSidebarItemHandler,
-  comparer = defaultComparer,
+  navItemHandler = defaultNavItemHandler(),
+  sidebarItemHandler = defaultSidebarItemHandler(),
+  comparer = defaultComparer(),
   handler = defaultHandler,
   // summary,
 }: Options = {}): Plugin {
@@ -42,11 +40,11 @@ export function AutoNav({
 
   /** 缓存数据 */
   let cache: Item[] = []
-  /** 同 srcDir，系统绝对路径 */
+  /** 标准化 srcDir 路径 */
   let baseDir: string
-  /** vitepress 配置文件夹，系统绝对路径 */
+  /** 标准化 vitepress 配置文件夹路径 */
   let configDir: string
-
+  /** 缓存文件名 */
   const CACHE_FILE = 'auto-nav-cache.json'
 
   return {
@@ -128,13 +126,13 @@ export function AutoNav({
     // 刷新后会重新触发 config 钩子
     async config(config: any) {
       let {
-        srcDir, // D:/vite-plugin-vitepress-auto-nav/example
-        pages, // ['a.md', 'b/c.md']，包括动态路由，还未处理 rewrites
-        cacheDir, // D:/vite-plugin-vitepress-auto-nav/example/.vitepress/cache
         root, // D:/vite-plugin-vitepress-auto-nav/example
+        srcDir, // D:/vite-plugin-vitepress-auto-nav/example
+        cacheDir, // D:/vite-plugin-vitepress-auto-nav/example/.vitepress/cache
+        pages, // ['a.md', 'b/c.md']，包括动态路由，未处理 rewrites
         rewrites, // { map: { 'x/origin.md': 'x/rewrite.md' }, inv: { 'x/rewrite.md': 'x/origin.md' } }
-        userConfig: { locales },
-        dynamicRoutes: { routes },
+        dynamicRoutes: { routes }, // [{ path: 'a/b.md', fullPath: 'D:/a/b.md', route: 'a/[name].md', params: { name: 'b' } }]
+        userConfig: { locales }, // { root: { label: '简体中文' }, en: { label: 'English' } }，同用户设置
       } = config.vitepress as SiteConfig
 
       // 记录关键配置并标准化路径
@@ -189,7 +187,7 @@ export function AutoNav({
 
           // 动态路由和原路由的层级肯定是一致的
           const dynamicRoute = routes.find(data => data.path === path)
-          const dynamicOrigin: string | undefined = dynamicRoute?.route
+          const dynamicOrigin = dynamicRoute?.route
           const dynamicOriginParts = dynamicOrigin?.split('/')
 
           // 遍历文章路径每一层
@@ -197,9 +195,8 @@ export function AutoNav({
           parts.forEach((part, index) => {
             // 最后一层为 md 文件
             const isFile = index === parts.length - 1
-            // 当前层级路径
-            const dynamicPath = dynamicOriginParts && `/${dynamicOriginParts.slice(0, index + 1).join('/')}`
-            const itemPath = `/${parts.slice(0, index + 1).join('/')}`
+            // 当前层级原始路径
+            const itemPath = `/${(dynamicOriginParts || parts).slice(0, index + 1).join('/')}`
             // 查找缓存
             let item = current.find(data => data.name === part)
 
@@ -207,7 +204,7 @@ export function AutoNav({
             if (!item) {
               item = {
                 name: part,
-                path: dynamicPath || itemPath, // 动态路由存储原始 path
+                path: itemPath,
                 depth: index,
               } as Item
               current.push(item)
@@ -229,13 +226,11 @@ export function AutoNav({
                 // 动态路由存在 params 数据
                 (item as FileInfo).params = dynamicRoute?.params || {}
                 // 动态路由存储原始文件名
-                if (dynamicOrigin) {
-                  const originName = basename(dynamicOrigin);
-                  (item as FileInfo).originName = originName
-                }
+                if (dynamicOrigin)
+                  (item as FileInfo).originName = basename(dynamicOrigin)
                 // 读取 md 数据
                 promises.push(
-                  getMarkdownData(absolutePath).then(({ h1, frontmatter }) => {
+                  getMarkdownData(absolutePath, dynamicRoute?.params).then(({ h1, frontmatter }) => {
                     (item as FileInfo).h1 = h1;
                     (item as FileInfo).frontmatter = frontmatter
                   }),
@@ -253,13 +248,13 @@ export function AutoNav({
 
       // 等待数据组装完成
       await Promise.allSettled(promises)
-      // 数据缓存
-      writeFile(join(cacheDir, CACHE_FILE), JSON.stringify(cache, null, 2))
       // 数据排序
       deepSort(cache, comparer)
+      // 数据缓存
+      writeFile(join(cacheDir, CACHE_FILE), JSON.stringify(cache, null, 2))
       // 数据处理
-      const sidebar = deepHandle(cache, sidebarItemHandler, locales)
-      const nav = deepHandle(cache, navItemHandler, locales)
+      const sidebar = deepHandle(cache, sidebarItemHandler, rewrites, locales)
+      const nav = deepHandle(cache, navItemHandler, rewrites, locales)
       // 修改配置
       handler(config, { sidebar, nav, rewrites, locales })
     },

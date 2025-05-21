@@ -1,8 +1,8 @@
 export default {
   paths() {
     return [
-      { params: { name: '1-3-a', version: 1 } },
-      { params: { name: '1-3-b', version: 2 } },
+      { params: { name: '1-3', version: 'a' } },
+      { params: { name: '1-3', version: 'b' } },
     ]
   },
 }

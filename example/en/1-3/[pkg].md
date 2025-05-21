@@ -1,5 +1,5 @@
 ---
-name: test
+name: frontmatter property
 ---
 
 # {{ $params.pkg }} - {{ $frontmatter.name }}

@@ -1,3 +1,3 @@
-# {{ $params.name }} - ${{ $params.version  }}
+# {{ $params.name }} - {{ $params.version  }}
 
 > zh

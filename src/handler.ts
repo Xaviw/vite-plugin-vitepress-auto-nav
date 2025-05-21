@@ -3,69 +3,73 @@ import type { FileInfo, FolderInfo, Handler, ItemHandler } from './types'
 import { minimatch } from 'minimatch'
 import { getFolderLink } from './utils'
 
-/** 默认 sidebarItem 生成方法 */
-export const defaultSidebarItemHandler: ItemHandler<DefaultTheme.SidebarItem> = (item, children) => {
-  if (item.name === 'index.md')
-    return false
-
-  const isFile = !!(item as FileInfo).link
-  const hasIndex = (item as FolderInfo).children?.find(i => i.name === 'index.md')
-
-  return {
-    text: item.name.replace(/\.md$/, ''),
-    link: isFile ? (item as FileInfo).link : (hasIndex as FileInfo)?.link,
-    items: children,
-    collapsed: false,
-  }
-}
-
-interface ClassicSidebarItemHandlerOptions {
-  /** 使用 md h1 作为显示名称，文件夹配置该项将作用于内部全部文件 */
+interface ItemHandlerOptions {
+  /** 使用 md h1 作为显示名称 */
   useMarkdownTitle?: boolean
   /** 自定义显示名称，优先级最高 */
   title?: string
-  /** 是否不在 sidebar 中显示 */
+  /** 不在 sidebar 中显示 */
   hide?: boolean
-  /** 同 DefaultTheme.SidebarItem.collapsed，仅文件夹生效 */
-  collapsed?: boolean
 }
 
 /**
  * 部分兼容 v3 的 sidebarItem 生成方法
  * @remark
- * 文件支持在 frontmatter 中进行配置，优先级低于参数配置
- * @param options 键为 glob 表达式字符串，值为配置对象，例如 `{ '/a/b/*.md': { hide: true } }`,仅最后一条匹配的配置生效
- * @param frontmatterPrefix frontmatter 中配置属性的前缀，例如设置为 `a_`，则会获取 `a_title` 作为自定义显示名称
+ * 文件支持在 frontmatter 中进行配置，优先级低于参数配置，设置 frontmatterPrefix 可以避免影响原有参数。
+ * @param options 键为 glob 表达式字符串（通过 [minimatch](https://github.com/isaacs/minimatch) 进行判断，仅最后一条匹配的配置生效；键需要以页面实际访问路径为准，文件需要包含扩展名 '.md'），值为配置对象，例如 `{ '/a/b/*.md': { hide: true } }`
+ * @param frontmatterPrefix frontmatter 中配置属性的前缀（不影响 options 配置中的属性名），例如设置为 `a_`，则会从 frontmatter 中获取 `a_title` 作为自定义显示名称
  */
-export function classicSidebarItemHandler(
-  options: Record<string, ClassicSidebarItemHandlerOptions> = {},
+export function sidebarItemHandler(
+  options: Record<string, ItemHandlerOptions & {
+    /** 同 DefaultTheme.SidebarItem.collapsed，仅文件夹生效 */
+    collapsed?: boolean
+  }> = {},
   frontmatterPrefix: string = '',
 ): ItemHandler<DefaultTheme.SidebarItem | DefaultTheme.SidebarMulti> {
-  return (item, children, locales) => {
+  return ({ item, children, locales, rewrites }) => {
+    const isFile = !!(item as FileInfo).link
+
     const frontmatter = (item as FileInfo).frontmatter || {}
+
     const [_, config = {}] = Object.entries(options).reverse().find(([pattern]) => {
-      return minimatch(item.path, pattern)
+      return minimatch(isFile ? `${(item as FileInfo).link}.md` : item.path, pattern)
     }) || []
 
     const hide = config.hide || frontmatter[`${frontmatterPrefix}hide`]
     if (item.name === 'index.md' || hide)
       return false
 
-    const isFile = !!(item as FileInfo).link
     const hasIndex = (item as FolderInfo).children?.find(i => i.name === 'index.md')
 
-    let text = config.title
-    if (!text && isFile && (config.useMarkdownTitle || frontmatter[`${frontmatterPrefix}useMarkdownTitle`])) {
-      text = (item as FileInfo).h1
+    let title = config.title || frontmatter[`${frontmatterPrefix}title`]
+    if (!title && isFile && (config.useMarkdownTitle || frontmatter[`${frontmatterPrefix}useMarkdownTitle`])) {
+      title = (item as FileInfo).h1
     }
+
+    // 使用国际化时，首层为语言目录
     if (locales ? item.depth === 1 : item.depth === 0) {
-      return {
-        [`${item.path.replace(/\.md$/, '')}/`]: children,
+      // 首层是文件时，无需显示 sidebar
+      if (isFile)
+        return false
+
+      // 使用原始路径进行匹配，rewrites 在引用配置的 handler 中处理
+      const result = {
+        [`${item.path}/`]: children,
       }
+
+      // 文件夹内动态路由与现首层路径不匹配时，对每一个动态路由做简单的映射
+      for (const [origin, rewrite] of Object.entries(rewrites.map)) {
+        if (origin.startsWith(item.path.slice(1)) && rewrite) {
+          // 匹配路径需要去掉文件名部分
+          result[`/${rewrite.replace(/[^/]+\.md$/, '')}`] = children
+        }
+      }
+
+      return result
     }
     else {
       return {
-        text: text || item.name.replace(/\.md$/, ''),
+        text: title || item.name.replace(/\.md$/, ''),
         link: isFile ? (item as FileInfo).link : (hasIndex as FileInfo)?.link,
         items: children,
         collapsed: config.collapsed,
@@ -73,75 +77,111 @@ export function classicSidebarItemHandler(
     }
   }
 }
-
 /**
- * 默认 navItem 生成方法
+ * 部分兼容 v3 的 navItem 生成方法
  * @remark
- * 生成的 activeMatch 属性未处理存在 rewrites 的情况
+ * 文件支持在 frontmatter 中进行配置，优先级低于参数配置，设置 frontmatterPrefix 可以避免影响原有参数。
+ * @param options 键为 glob 表达式字符串（通过 [minimatch](https://github.com/isaacs/minimatch) 进行判断，仅最后一条匹配的配置生效；键需要以页面实际访问路径为准，文件需要包含扩展名 '.md'），值为配置对象，例如 `{ '/a/b/*.md': { hide: true } }`
+ * @param frontmatterPrefix frontmatter 中配置属性的前缀（不影响 options 配置中的属性名），例如设置为 `a_`，则会从 frontmatter 中获取 `a_title` 作为自定义显示名称
+ * @param depth 最大显示层级（从 0 开始，存在国际化配置时会忽略首层），默认为 0
  */
-export const defaultNavItemHandler: ItemHandler<DefaultTheme.NavItemWithLink | DefaultTheme.NavItemWithChildren> = (item, children, locales) => {
-  const MAX_DEPTH = locales ? 1 : 0
-  if (item.name === 'index.md' || item.depth > MAX_DEPTH)
-    return false
+export function navItemHandler(
+  options: Record<string, ItemHandlerOptions> = {},
+  frontmatterPrefix: string = '',
+  depth: number = 0,
+): ItemHandler<DefaultTheme.NavItemWithLink | DefaultTheme.NavItemWithChildren> {
+  return ({ item, children, locales, rewrites: _rewrites }) => {
+    const MAX_DEPTH = depth + (locales ? 1 : 0)
+    const isFile = !!(item as FileInfo).link
 
-  let link: string | undefined = (item as FileInfo).link
-  // 文件夹时获取文件夹可用链接
-  if (!link && (item as FolderInfo).children?.length) {
-    link = getFolderLink(item as FolderInfo)
-  }
+    const frontmatter = (item as FileInfo).frontmatter || {}
 
-  return !children?.length || item.depth === MAX_DEPTH
-    ? {
-        text: item.name.replace(/\.md$/, ''),
-        link,
-        activeMatch: `^${item.path}`,
-      } as DefaultTheme.NavItemWithLink
-    : {
+    const [_, config = {}] = Object.entries(options).reverse().find(([pattern]) => {
+      return minimatch(isFile ? `${(item as FileInfo).link}.md` : item.path, pattern)
+    }) || []
+
+    const hide = config.hide || frontmatter[`${frontmatterPrefix}hide`]
+    if (item.name === 'index.md' || hide || item.depth > MAX_DEPTH)
+      return false
+
+    let title = config.title || frontmatter[`${frontmatterPrefix}title`]
+    if (!title && isFile && (config.useMarkdownTitle || frontmatter[`${frontmatterPrefix}useMarkdownTitle`])) {
+      title = (item as FileInfo).h1
+    }
+
+    let link: string | undefined = (item as FileInfo).link
+    // 文件夹时获取文件夹可用链接
+    if (!link && (item as FolderInfo).children?.length) {
+      link = getFolderLink(item as FolderInfo)
+    }
+
+    // 国际化首层
+    if (locales && item.depth === 0) {
+      return {
         text: item.name,
         items: children,
-        activeMatch: `^${item.path}`,
       } as DefaultTheme.NavItemWithChildren
+    }
+    // 文件或最后一层
+    else if (!children?.length || item.depth === MAX_DEPTH) {
+      return {
+        text: title || item.name.replace(/\.md$/, ''),
+        link,
+        activeMatch: `^${item.path.replace(/\.md$/, '')}`,
+      } as DefaultTheme.NavItemWithLink
+    }
+    // 只可能是文件夹，无需去除扩展名
+    return {
+      text: title || item.name,
+      items: children,
+      activeMatch: `^${item.path}`,
+    } as DefaultTheme.NavItemWithChildren
+  }
 }
 
 /** 应用生成的数据到配置中 */
-export const defaultHandler: Handler = (config, { nav, sidebar, rewrites: { map }, locales }) => {
+export const handler: Handler = (config, { nav, sidebar, locales }) => {
   if (locales) {
+    // 全部语言名称
     const langs = Object.keys(locales)
     langs.forEach((lang) => {
+      // 确保语言配置下 themeConfig 存在
       if (!config.vitepress.site.locales[lang].themeConfig)
         config.vitepress.site.locales[lang].themeConfig = {}
 
+      // 从 sidebar 数据中找到对应语言的 items 配置
       const sidebarData = sidebar.find((item) => {
+        // root 对应根目录存在但是语言配置中不存在的名称
         if (lang === 'root') {
           return !langs.includes((item as DefaultTheme.SidebarItem).text!)
         }
         return item.text === lang
-      })?.items
-      config.vitepress.site.locales[lang].themeConfig.sidebar = (sidebarData as DefaultTheme.SidebarMulti[]).reduce((p, c) => {
-        const [base, items] = Object.entries(c)[0]
-        p[base] = items
-        return p
-      }, {})
+      })?.items as DefaultTheme.SidebarMulti[] | undefined
 
+      // 合并每一条 SidebarMulti 并应用
+      if (sidebarData?.length) {
+        config.vitepress.site.locales[lang].themeConfig.sidebar = sidebarData.reduce((p, c) => {
+          return { ...p, ...c }
+        }, {})
+      }
+
+      // 从 nav 数据中找到对应语言的 items 配置
       const navData = nav.find((item) => {
         if (lang === 'root') {
           return !langs.includes((item as DefaultTheme.NavItemWithChildren).text!)
         }
         return item.text === lang
-      })?.items
-      config.vitepress.site.locales[lang].themeConfig.nav = navData
+      })?.items as DefaultTheme.NavItemWithChildren[] | undefined
+      if (navData?.length) {
+        config.vitepress.site.locales[lang].themeConfig.nav = navData
+      }
     })
   }
+  // 非国际化
   else {
-    config.vitepress.site.themeConfig.sidebar = sidebar.reduce<DefaultTheme.SidebarMulti>(
+    config.vitepress.site.themeConfig.sidebar = sidebar.reduce(
       (p, c) => {
-        const [base, items] = Object.entries(c)[0]
-        for (const [origin, rewrite] of Object.entries(map)) {
-          if (origin.startsWith(base.slice(1)) && rewrite) {
-            p[rewrite.replace(/\.md$/, '')] = items
-          }
-        }
-        return { ...p, ...c as DefaultTheme.SidebarMulti }
+        return { ...p, ...c }
       },
       {},
     )

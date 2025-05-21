@@ -1,4 +1,4 @@
-import type { LocaleConfig } from 'vitepress'
+import type { LocaleConfig, SiteConfig } from 'vitepress'
 import type { FileInfo, FolderInfo, Item, ItemHandler, Recordable, TimesInfo } from './types'
 import { exec } from 'node:child_process'
 import { readFile, stat } from 'node:fs/promises'
@@ -9,7 +9,7 @@ import fm from 'front-matter'
  * 获取 md 文件的 frontmatter 及 h1
  * @param path md 文件路径
  */
-export async function getMarkdownData(path: string): Promise<Pick<FileInfo, 'h1' | 'frontmatter'>> {
+export async function getMarkdownData(path: string, params: Recordable = {}): Promise<Pick<FileInfo, 'h1' | 'frontmatter'>> {
   const fileStr = await readFile(path, 'utf-8')
   const { attributes: frontmatter = {}, body } = fm<Record<string, string>>(fileStr)
 
@@ -18,10 +18,15 @@ export async function getMarkdownData(path: string): Promise<Pick<FileInfo, 'h1'
 
   // 处理标题中包含 frontmatter 变量的情况
   if (heading) {
-    heading = heading.replaceAll(
-      /\{\{\s*\$frontmatter\.(\S+?)\s*\}\}/g,
-      (_, key) => frontmatter[key] || '',
-    )
+    heading = heading
+      .replaceAll(
+        /\{\{\s*\$frontmatter\.(\S+?)\s*\}\}/g,
+        (_, key) => frontmatter[key] || '',
+      )
+      .replaceAll(
+        /\{\{\s*\$params\.(\S+?)\s*\}\}/g,
+        (_, key) => params[key] || '',
+      )
   }
 
   return {
@@ -100,14 +105,14 @@ export function deepSort(
 }
 
 /** 调用 handler 生成 sidebar 或 nav */
-export function deepHandle<T extends Recordable>(list: Item[], handler: ItemHandler<T>, locales?: LocaleConfig): T[] {
+export function deepHandle<T extends Recordable>(list: Item[], handler: ItemHandler<T>, rewrites: SiteConfig['rewrites'], locales?: LocaleConfig): T[] {
   const result: T[] = []
   for (const item of list) {
     let children
     if ((item as FolderInfo).children) {
-      children = deepHandle((item as FolderInfo).children, handler, locales)
+      children = deepHandle((item as FolderInfo).children, handler, rewrites, locales)
     }
-    const res = handler(item, children, locales)
+    const res = handler({ item, children, locales, rewrites })
     if (res)
       result.push(res)
   }
@@ -116,6 +121,7 @@ export function deepHandle<T extends Recordable>(list: Item[], handler: ItemHand
 
 /** 整理缓存，删除无用数据 */
 export function compactCache(cache: Item[], pages: string[]): void {
+  // 从全部页面路径中整理各个页面层级包含的名称
   const parts = pages.reduce<string[][]>((p, c) => {
     const names = c.split('/')
     names.forEach((name, index) => {
@@ -132,11 +138,14 @@ export function compactCache(cache: Item[], pages: string[]): void {
 
   function compact(current: Item[]): void {
     for (let i = 0; i < current.length; i++) {
+      // 未从整理的页面路径中找到当前名称，删除该缓存
       if (!parts[current[i].depth]?.includes(current[i].name)) {
         current.splice(i, 1)
+        // 删除后重新对齐索引
         i--
       }
       else if ((current[i] as FolderInfo).children?.length) {
+        // 递归处理
         compact((current[i] as FolderInfo).children)
       }
     }

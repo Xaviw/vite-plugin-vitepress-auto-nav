@@ -1,10 +1,13 @@
 import { defineConfig } from 'vitepress'
-import { AutoNav, classicComparer, classicSidebarItemHandler } from '../../src'
+import { AutoNav } from '../../src'
+import { comparer } from '../../src/comparer'
+import { navItemHandler, sidebarItemHandler } from '../../src/handler'
 
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   rewrites: {
-    '1-2/1-2-3/:any': 'test/:any',
+    'zh/:rest*': ':rest*',
+    ':path?/1-2/1-2-3/:any': 'test/:any',
   },
   locales: {
     root: {
@@ -17,8 +20,23 @@ export default defineConfig({
   vite: {
     plugins: [
       AutoNav({
-        comparer: classicComparer(),
-        sidebarItemHandler: classicSidebarItemHandler(),
+        comparer: comparer({
+          config: {
+            '**/1-2': 0,
+          },
+        }),
+        sidebarItemHandler: sidebarItemHandler(
+          {
+            '**/1-2/1-2-3': { collapsed: false },
+          },
+        ),
+        navItemHandler: navItemHandler(
+          {
+            '**/1-4': { hide: true },
+          },
+          undefined,
+          1,
+        ),
       }),
     ],
   },
