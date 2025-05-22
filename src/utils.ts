@@ -1,5 +1,5 @@
 import type { LocaleConfig, SiteConfig } from 'vitepress'
-import type { FileInfo, FolderInfo, Item, ItemHandler, Recordable, TimesInfo } from './types'
+import type { ChildrenLinks, FileInfo, FolderInfo, Item, ItemHandler, Recordable, TimesInfo } from './types'
 import { exec } from 'node:child_process'
 import { readFile, stat } from 'node:fs/promises'
 import { promisify } from 'node:util'
@@ -109,12 +109,12 @@ export function deepHandle<T extends Recordable>(list: Item[], handler: ItemHand
   const result: T[] = []
   for (const item of list) {
     let children
-    let childrenRewrites
+    let childrenLinks
     if ((item as FolderInfo).children) {
       children = deepHandle((item as FolderInfo).children, handler, rewrites, locales)
-      childrenRewrites = getChildrenRewrites((item as FolderInfo).children, rewrites.inv)
+      childrenLinks = getChildrenLinks((item as FolderInfo).children, rewrites.inv)
     }
-    const res = handler({ item, children, locales, rewrites, childrenRewrites })
+    const res = handler({ item, children, locales, rewrites, childrenLinks })
     if (res)
       result.push(res)
   }
@@ -179,18 +179,23 @@ export function debounce<T extends (...args: any[]) => any>(
 }
 
 /**
- * 获取文件夹下不匹配文件链接的重写规则
+ * 获取文件夹下重写及未重写的链接
  */
-export function getChildrenRewrites(items: Item[], inv: SiteConfig['rewrites']['inv']): string[] {
-  const result: string[] = []
+export function getChildrenLinks(items: Item[], inv: SiteConfig['rewrites']['inv']): ChildrenLinks {
+  const notRewrites: string[] = []
+  const rewrites: string[] = []
   for (const item of items) {
     if ((item as FolderInfo).children?.length) {
-      result.push(...getChildrenRewrites((item as FolderInfo).children, inv))
+      const { notRewrites: n, rewrites: r } = getChildrenLinks((item as FolderInfo).children, inv)
+      notRewrites.push(...n)
+      rewrites.push(...r)
     }
-    else if ((item as FileInfo)) {
-      const rewrite = `${(item as FileInfo).link.slice(1)}.md`
-      inv[rewrite] && result.push(rewrite)
+    else if ((item as FileInfo).link) {
+      if (inv[`${(item as FileInfo).link.slice(1)}.md`])
+        rewrites.push((item as FileInfo).link)
+      else
+        notRewrites.push((item as FileInfo).link)
     }
   }
-  return result
+  return { notRewrites, rewrites }
 }

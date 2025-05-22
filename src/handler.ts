@@ -103,7 +103,7 @@ export function navItemHandler(
     depth?: number
   } = {},
 ): ItemHandler<DefaultTheme.NavItemWithLink | DefaultTheme.NavItemWithChildren> {
-  return ({ item, children, locales, childrenRewrites }) => {
+  return ({ item, children, locales, childrenLinks }) => {
     const MAX_DEPTH = depth + (locales ? 1 : 0)
     const isFile = !!(item as FileInfo).link
 
@@ -136,10 +136,19 @@ export function navItemHandler(
       } as DefaultTheme.NavItemWithChildren
     }
 
-    const subMatches = (childrenRewrites || [])
-      .filter(i => !i.startsWith(`${item.path.slice(1)}/`))
-      .map(i => `/${i}`.replace(/\.md$/, ''))
-    const activeMatch = `^(${[item.path.replace(/\.md$/, ''), ...subMatches].join('|')})`.replace(/\//g, '\\/')
+    const matches = new Set()
+    if (childrenLinks?.notRewrites.length) {
+      matches.add(`${item.path}/`)
+    }
+    if (childrenLinks?.rewrites.length) {
+      childrenLinks.rewrites.forEach((rewrite) => {
+        matches.add(rewrite)
+      })
+    }
+    if (isFile) {
+      matches.add(link)
+    }
+    const activeMatch = `^${Array.from(matches).join('|')}`.replace(/\//g, '\\/')
 
     // 文件或最后一层
     if (!children?.length || item.depth === MAX_DEPTH) {
@@ -202,13 +211,18 @@ export const handler: Handler = (config, { nav, sidebar, locales }) => {
       }
 
       // 从 nav 数据中找到对应语言的 items 配置
-      const navData = nav.find((item) => {
-        if (lang === 'root') {
-          return !langs.includes((item as DefaultTheme.NavItemWithChildren).text!)
-        }
-        return item.text === lang
-      })?.items as DefaultTheme.NavItemWithChildren[] | undefined
-      if (navData?.length) {
+      if (lang === 'root') {
+        const navData = nav.reduce<DefaultTheme.NavItemWithLink[]>((p: any, c: any) => {
+          if (!langs.includes(c.text!))
+            return [...p, ...(c as DefaultTheme.NavItemWithChildren).items!]
+          return p
+        }, [])
+        if (!config.vitepress.site.locales.root.themeConfig)
+          config.vitepress.site.locales.root.themeConfig = {}
+        config.vitepress.site.locales.root.themeConfig.nav = navData
+      }
+      else {
+        const navData = nav.find(item => item.text === lang)?.items
         config.vitepress.site.locales[lang].themeConfig.nav = navData
       }
     })
