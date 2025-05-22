@@ -69,7 +69,7 @@ export type Item = FileInfo | FolderInfo
 export type Comparer = (a: Item, b: Item) => number
 
 export type ItemHandler<T extends Recordable = Recordable> = (
-  options: { item: Item, children: T[] | undefined, locales?: LocaleConfig, rewrites: SiteConfig['rewrites'] }
+  options: { item: Item, children?: T[], childrenRewrites?: string[], locales?: LocaleConfig, rewrites: SiteConfig['rewrites'] }
 ) => T | false
 
 export type Handler<

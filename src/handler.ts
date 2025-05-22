@@ -103,7 +103,7 @@ export function navItemHandler(
     depth?: number
   } = {},
 ): ItemHandler<DefaultTheme.NavItemWithLink | DefaultTheme.NavItemWithChildren> {
-  return ({ item, children, locales, rewrites: _rewrites }) => {
+  return ({ item, children, locales, childrenRewrites }) => {
     const MAX_DEPTH = depth + (locales ? 1 : 0)
     const isFile = !!(item as FileInfo).link
 
@@ -135,19 +135,25 @@ export function navItemHandler(
         items: children,
       } as DefaultTheme.NavItemWithChildren
     }
+
+    const subMatches = (childrenRewrites || [])
+      .filter(i => !i.startsWith(`${item.path.slice(1)}/`))
+      .map(i => `/${i}`.replace(/\.md$/, ''))
+    const activeMatch = `^(${[item.path.replace(/\.md$/, ''), ...subMatches].join('|')})`.replace(/\//g, '\\/')
+
     // 文件或最后一层
-    else if (!children?.length || item.depth === MAX_DEPTH) {
+    if (!children?.length || item.depth === MAX_DEPTH) {
       return {
         text: title || item.name.replace(/\.md$/, ''),
         link,
-        activeMatch: `^${item.path.replace(/\.md$/, '')}`,
+        activeMatch,
       } as DefaultTheme.NavItemWithLink
     }
     // 只可能是文件夹，无需去除扩展名
     return {
       text: title || item.name,
       items: children,
-      activeMatch: `^${item.path}`,
+      activeMatch,
     } as DefaultTheme.NavItemWithChildren
   }
 }

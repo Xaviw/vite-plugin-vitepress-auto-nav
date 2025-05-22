@@ -109,10 +109,12 @@ export function deepHandle<T extends Recordable>(list: Item[], handler: ItemHand
   const result: T[] = []
   for (const item of list) {
     let children
+    let childrenRewrites
     if ((item as FolderInfo).children) {
       children = deepHandle((item as FolderInfo).children, handler, rewrites, locales)
+      childrenRewrites = getChildrenRewrites((item as FolderInfo).children, rewrites.inv)
     }
-    const res = handler({ item, children, locales, rewrites })
+    const res = handler({ item, children, locales, rewrites, childrenRewrites })
     if (res)
       result.push(res)
   }
@@ -174,4 +176,21 @@ export function debounce<T extends (...args: any[]) => any>(
       timer = null
     }, delay)
   }
+}
+
+/**
+ * 获取文件夹下不匹配文件链接的重写规则
+ */
+export function getChildrenRewrites(items: Item[], inv: SiteConfig['rewrites']['inv']): string[] {
+  const result: string[] = []
+  for (const item of items) {
+    if ((item as FolderInfo).children?.length) {
+      result.push(...getChildrenRewrites((item as FolderInfo).children, inv))
+    }
+    else if ((item as FileInfo)) {
+      const rewrite = `${(item as FileInfo).link.slice(1)}.md`
+      inv[rewrite] && result.push(rewrite)
+    }
+  }
+  return result
 }
