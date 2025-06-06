@@ -21,9 +21,10 @@ export interface TimesInfo {
   lastCommitTime: number
 }
 
+/** 文件、文件夹公共数据 */
 interface BaseInfo {
   /**
-   * 文件、文件夹名（文件含扩展名 '.md'，动态路由为生成后的 name）
+   * 名称（文件含扩展名 '.md'，动态路由为生成后的 name）
    */
   name: string
   /**
@@ -31,7 +32,7 @@ interface BaseInfo {
    */
   path: string
   /**
-   * 原始路径深度，从 0 开始（对应 path 层级）
+   * path 层级深度，从 0 开始（例如 '/a/b.md' 深入为 1）
    */
   depth: number
   /**
@@ -42,13 +43,14 @@ interface BaseInfo {
   timesInfo: TimesInfo
 }
 
+/** 文件数据 */
 export interface FileInfo extends BaseInfo {
   /**
    * 访问链接，支持动态路由以及 rewrites（以 '/' 开头以及分隔，不含扩展名）
    */
   link: string
   /**
-   * 动态路由的原始文件名称（含扩展名 '.md'）
+   * 动态路由的原始文件名称（含扩展名 '.md'，非动态路由文件不含该属性）
    */
   originName?: string
   /** 文章内一级标题 */
@@ -59,30 +61,60 @@ export interface FileInfo extends BaseInfo {
   params: Recordable
 }
 
+/** 文件夹数据 */
 export interface FolderInfo extends BaseInfo {
   /** 子文件、文件夹信息 */
   children: Item[]
 }
 
+/** 文件或文件夹数据 */
 export type Item = FileInfo | FolderInfo
 
+/** 文件或文件夹排序比较方法 */
 export type Comparer = (a: Item, b: Item) => number
 
+/** 文件夹下所有普通路径和 rewrite 路径 */
 export interface ChildrenLinks {
+  /** 普通页面路径 */
   notRewrites: string[]
+  /** rewrite 页面路径 */
   rewrites: string[]
 }
 
+/** 文件或文件夹数据转换为 vitepress 配置的处理方法（返回 false 表示忽略该文件或文件夹） */
 export type ItemHandler<T extends Recordable = Recordable> = (
-  options: { item: Item, children?: T[], childrenLinks?: ChildrenLinks, locales?: LocaleConfig, rewrites: SiteConfig['rewrites'] }
+  options: {
+    /** 文件或文件夹数据 */
+    item: Item
+    /** 文件夹子数据数组 */
+    children?: T[]
+    /** 文件夹下所有普通路径和 rewrite 路径 */
+    childrenLinks?: ChildrenLinks
+    /** vitepress 国际化配置 */
+    locales?: LocaleConfig
+    /** vitepress rewrites 配置 */
+    rewrites: SiteConfig['rewrites']
+  }
 ) => T | false
 
+/** ItemHandler 处理后的数据应用到 vitepress 配置的方法 */
 export type Handler<
   S extends Recordable = DefaultTheme.SidebarItem | DefaultTheme.SidebarMulti,
   N extends Recordable = DefaultTheme.NavItemWithLink | DefaultTheme.NavItemWithChildren,
 > = (
+/** vitepress 原始配置 */
   config: VitepressUserConfig,
-  data: { sidebar: S[], nav: N[], rewrites: SiteConfig['rewrites'], locales?: LocaleConfig }
+  /** 插件生成的配置 */
+  data: {
+    /** ItemHandler 处理后的数据组成的数组 */
+    sidebar: S[]
+    /** ItemHandler 处理后的数据组成的数组 */
+    nav: N[]
+    /** vitepress rewrites 配置 */
+    rewrites: SiteConfig['rewrites']
+    /** vitepress 国际化配置 */
+    locales?: LocaleConfig
+  }
 ) => MaybePromise<Omit<VitepressUserConfig, 'plugins'>>
 
 /** 插件配置项 */
@@ -125,24 +157,24 @@ export interface Options<
    */
   handler?: Handler<S, N>
 
-  /** 用于支持从 Gitbook 的 SUMMARY 文件生成 sidebar 与 nav，添加后其他配置将不再生效 */
-  summary?: {
-    /** SUMMARY.md 文件路径 */
-    target: string
-    /**
-     * 同 SidebarItem.collapsed
-     *
-     * 未指定时，不可折叠
-     *
-     * 为 true 时，可折叠且默认折叠
-     *
-     * 为 false 时，可折叠且默认展开
-     */
-    collapsed?: boolean
-    /**
-     * 去掉转义字符 "\"
-     * @default true
-     */
-    removeEscape?: boolean
-  }
 }
+// /** 用于支持从 Gitbook 的 SUMMARY 文件生成 sidebar 与 nav，添加后其他配置将不再生效 */
+// summary?: {
+//   /** SUMMARY.md 文件路径 */
+//   target: string
+//   /**
+//    * 同 SidebarItem.collapsed
+//    *
+//    * 未指定时，不可折叠
+//    *
+//    * 为 true 时，可折叠且默认折叠
+//    *
+//    * 为 false 时，可折叠且默认展开
+//    */
+//   collapsed?: boolean
+//   /**
+//    * 去掉转义字符 "\"
+//    * @default true
+//    */
+//   removeEscape?: boolean
+// }

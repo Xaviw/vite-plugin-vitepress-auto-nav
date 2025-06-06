@@ -4,10 +4,10 @@ import { minimatch } from 'minimatch'
 /**
  * 兼容 v3 的排序方法
  * @remark
- * 优先按自定义权重排序，其次按首次 git 提交时间（或创建时间）排序
+ * 优先按自定义权重排序，其次按首次 git 提交时间（或本地文件创建时间）排序
  * @param options 配置对象
  * @param options.key frontmatter 排序权重字段名称，为空时忽略从 frontmatter 中获取，默认 'sort'
- * @param options.config 自定义排序权重配置对象， 键为 glob 表达式字符串（通过 [minimatch](https://github.com/isaacs/minimatch) 进行判断，仅最后一条匹配的配置生效；键需要以页面实际访问路径为准，文件需要包含扩展名 '.md'），值为权重，例如 `{ '/a/b.md': 1, '/c': 2 }`
+ * @param options.config 自定义排序权重配置对象，键为 glob 表达式字符串（通过 [minimatch](https://github.com/isaacs/minimatch) 进行判断，仅最后一条匹配的配置生效；键需要以页面实际访问路径为准，文件需要包含扩展名 '.md'），值为权重，例如 `{ '/a/b.md': 1, '/c': 2 }`
  * @param options.order 排序方式，默认 'asc' 升序
  */
 export function comparer(

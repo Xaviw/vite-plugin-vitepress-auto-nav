@@ -1,7 +1,7 @@
 import type { DefaultTheme } from 'vitepress'
-import type { FileInfo, FolderInfo, Handler, ItemHandler } from './types'
+import type { Handler, ItemHandler } from './types'
 import { minimatch } from 'minimatch'
-import { getFolderLink } from './utils'
+import { assertFile, assertFolder, getFolderLink } from './utils'
 
 interface ItemHandlerOptions {
   /** 使用 md h1 作为显示名称 */
@@ -33,23 +33,22 @@ export function sidebarItemHandler(
   } = {},
 ): ItemHandler<DefaultTheme.SidebarItem | DefaultTheme.SidebarMulti> {
   return ({ item, children, locales, rewrites }) => {
-    const isFile = !!(item as FileInfo).link
+    const isFile = assertFile(item)
 
-    const frontmatter = (item as FileInfo).frontmatter || {}
+    const frontmatter = isFile ? item.frontmatter : {}
 
+    // 查找匹配的配置
     const [_, options = {}] = Object.entries(config).reverse().find(([pattern]) => {
-      return minimatch(isFile ? `${(item as FileInfo).link}.md` : item.path, pattern)
+      return minimatch(isFile ? `${item.link}.md` : item.path, pattern)
     }) || []
 
     const hide = options.hide || frontmatter[`${frontmatterPrefix}hide`]
     if (item.name === 'index.md' || hide)
       return false
 
-    const hasIndex = (item as FolderInfo).children?.find(i => i.name === 'index.md')
-
     let title = options.title || frontmatter[`${frontmatterPrefix}title`]
     if (!title && isFile && (options.useMarkdownTitle || frontmatter[`${frontmatterPrefix}useMarkdownTitle`])) {
-      title = (item as FileInfo).h1
+      title = item.h1
     }
 
     // 使用国际化时，首层为语言目录
@@ -76,7 +75,9 @@ export function sidebarItemHandler(
     else {
       return {
         text: title || item.name.replace(/\.md$/, ''),
-        link: isFile ? (item as FileInfo).link : (hasIndex as FileInfo)?.link,
+        link: isFile
+          ? item.link
+          : getFolderLink(item, true),
         items: children,
         collapsed: options.collapsed,
       }
@@ -105,12 +106,13 @@ export function navItemHandler(
 ): ItemHandler<DefaultTheme.NavItemWithLink | DefaultTheme.NavItemWithChildren> {
   return ({ item, children, locales, childrenLinks }) => {
     const MAX_DEPTH = depth + (locales ? 1 : 0)
-    const isFile = !!(item as FileInfo).link
+    const isFile = assertFile(item)
 
-    const frontmatter = (item as FileInfo).frontmatter || {}
+    const frontmatter = isFile ? item.frontmatter : {}
 
+    // 查找匹配的配置
     const [_, options = {}] = Object.entries(config).reverse().find(([pattern]) => {
-      return minimatch(isFile ? `${(item as FileInfo).link}.md` : item.path, pattern)
+      return minimatch(isFile ? `${item.link}.md` : item.path, pattern)
     }) || []
 
     const hide = options.hide || frontmatter[`${frontmatterPrefix}hide`]
@@ -119,13 +121,13 @@ export function navItemHandler(
 
     let title = options.title || frontmatter[`${frontmatterPrefix}title`]
     if (!title && isFile && (options.useMarkdownTitle || frontmatter[`${frontmatterPrefix}useMarkdownTitle`])) {
-      title = (item as FileInfo).h1
+      title = item.h1
     }
 
-    let link: string | undefined = (item as FileInfo).link
+    let link = isFile ? item.link : undefined
     // 文件夹时获取文件夹可用链接
-    if (!link && (item as FolderInfo).children?.length) {
-      link = getFolderLink(item as FolderInfo)
+    if (assertFolder(item)) {
+      link = getFolderLink(item)
     }
 
     // 国际化首层

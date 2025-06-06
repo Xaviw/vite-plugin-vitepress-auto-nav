@@ -38,6 +38,7 @@ export async function getMarkdownData(path: string, params: Recordable = {}): Pr
 /**
  * 获取文件夹下首个可访问路径
  * @param item 文件夹数据
+ * @param onlyIndex 仅匹配子 index.md 文件，默认为 false
  * @remark
  * 文件夹中存在 index.md 时，返回文件夹自身路径；否则返回第一篇子 md 路径（若有），或第一个子文件夹下的第一篇 md 路径
  * @example
@@ -45,17 +46,19 @@ export async function getMarkdownData(path: string, params: Recordable = {}): Pr
  * getFolderLink(folderData) // 可能返回 `/folder/` 或 `/folder/sub/anyMd`
  * ```
  */
-export function getFolderLink(item: FolderInfo): string | undefined {
+export function getFolderLink(item: FolderInfo, onlyIndex: boolean = false): string | undefined {
   if (!item.children?.length)
     return
 
-  const index = item.children.find(i => i.name === 'index.md')
+  const index = item.children.find(i => assertFile(i) && i.name === 'index.md') as FileInfo | undefined
   if (index)
-    return (index as FileInfo).link
+    return index.link
+  else if (onlyIndex)
+    return
 
-  const md = item.children.find(i => (i as FileInfo).link)
+  const md = item.children.find(assertFile)
   if (md)
-    return (md as FileInfo).link
+    return md.link
 
   return getFolderLink(item.children[0] as FolderInfo)
 }
@@ -98,8 +101,8 @@ export function deepSort(
 ): void {
   list.sort(comparer)
   for (const item of list) {
-    if ((item as FolderInfo).children) {
-      deepSort((item as FolderInfo).children, comparer)
+    if (assertFolder(item)) {
+      deepSort(item.children, comparer)
     }
   }
 }
@@ -110,9 +113,9 @@ export function deepHandle<T extends Recordable>(list: Item[], handler: ItemHand
   for (const item of list) {
     let children
     let childrenLinks
-    if ((item as FolderInfo).children) {
-      children = deepHandle((item as FolderInfo).children, handler, rewrites, locales)
-      childrenLinks = getChildrenLinks((item as FolderInfo).children, rewrites.inv)
+    if (assertFolder(item)) {
+      children = deepHandle(item.children, handler, rewrites, locales)
+      childrenLinks = getChildrenLinks(item.children, rewrites.inv)
     }
     const res = handler({ item, children, locales, rewrites, childrenLinks })
     if (res)
@@ -185,17 +188,29 @@ export function getChildrenLinks(items: Item[], inv: SiteConfig['rewrites']['inv
   const notRewrites: string[] = []
   const rewrites: string[] = []
   for (const item of items) {
-    if ((item as FolderInfo).children?.length) {
-      const { notRewrites: n, rewrites: r } = getChildrenLinks((item as FolderInfo).children, inv)
+    if (assertFolder(item)) {
+      const { notRewrites: n, rewrites: r } = getChildrenLinks(item.children, inv)
       notRewrites.push(...n)
       rewrites.push(...r)
     }
-    else if ((item as FileInfo).link) {
-      if (inv[`${(item as FileInfo).link.slice(1)}.md`])
-        rewrites.push((item as FileInfo).link)
-      else
-        notRewrites.push((item as FileInfo).link)
+    else {
+      if (inv[`${item.link.slice(1)}${item.name === 'index.md' ? 'index' : ''}.md`]) {
+        rewrites.push(item.link)
+      }
+      else {
+        notRewrites.push(item.link)
+      }
     }
   }
   return { notRewrites, rewrites }
+}
+
+/** 断言数据是文件 */
+export function assertFile(item?: Item): item is FileInfo {
+  return (item as FileInfo)?.link !== undefined
+}
+
+/** 断言数据是文件夹 */
+export function assertFolder(item?: Item): item is FolderInfo {
+  return (item as FolderInfo)?.children !== undefined
 }

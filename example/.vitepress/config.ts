@@ -7,7 +7,7 @@ import { navItemHandler, sidebarItemHandler } from '../../src/handler'
 export default defineConfig({
   rewrites: {
     'zh/:rest*': ':rest*',
-    ':path?/1-2/1-2-3/:any': 'test/:any',
+    'en/:path?/1-2-3/:any': 'en/test/:any',
   },
   locales: {
     root: {

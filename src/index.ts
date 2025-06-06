@@ -4,35 +4,36 @@ import { existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { basename, join, normalize, sep } from 'node:path'
 import { minimatch } from 'minimatch'
-import { comparer as defaultComparer } from './comparer'
-import { handler as defaultHandler, navItemHandler as defaultNavItemHandler, sidebarItemHandler as defaultSidebarItemHandler } from './handler'
-import { compactCache, debounce, deepHandle, deepSort, getFolderLink, getMarkdownData, getTimestamp } from './utils'
+import { comparer } from './comparer'
+import { handler, navItemHandler, sidebarItemHandler } from './handler'
+import { assertFile, assertFolder, compactCache, debounce, deepHandle, deepSort, getFolderLink, getMarkdownData, getTimestamp } from './utils'
 
 export {
-  defaultComparer,
-  defaultHandler,
-  defaultNavItemHandler,
-  defaultSidebarItemHandler,
+  assertFile,
+  assertFolder,
+  comparer,
   getFolderLink,
-  getMarkdownData,
+  handler,
+  navItemHandler,
+  sidebarItemHandler,
 }
 
 export type * from './types'
 
 export function AutoNav({
   exclude = [],
-  navItemHandler = defaultNavItemHandler(),
-  sidebarItemHandler = defaultSidebarItemHandler(),
-  comparer = defaultComparer(),
-  handler = defaultHandler,
+  navItemHandler: nHdr = navItemHandler(),
+  sidebarItemHandler: sHdr = sidebarItemHandler(),
+  comparer: cpr = comparer(),
+  handler: hdr = handler,
   // summary,
 }: Options = {}): Plugin {
   // 参数校验
   Object.entries({
-    navItemHandler,
-    sidebarItemHandler,
+    navItemHandler: nHdr,
+    sidebarItemHandler: sHdr,
     comparer,
-    handler,
+    handler: hdr,
   }).forEach(([key, value]) => {
     if (typeof value !== 'function')
       throw new TypeError(`${key} 必须是一个函数`)
@@ -196,8 +197,6 @@ export function AutoNav({
           // 遍历文章路径每一层
           const parts = path.split('/')
           parts.forEach((part, index) => {
-            // 最后一层为 md 文件
-            const isFile = index === parts.length - 1
             // 当前层级原始路径
             const itemPath = `/${(dynamicOriginParts || parts).slice(0, index + 1).join('/')}`
             // 查找缓存
@@ -223,14 +222,14 @@ export function AutoNav({
               )
 
               // 文件数据
-              if (isFile) {
+              if (assertFile(item)) {
                 // 处理 rewrite 以及 index.md
-                (item as FileInfo).link = `/${(rewrite || path).replace(/(index)?\.md$/, '')}`;
+                item.link = `/${(rewrite || path).replace(/(index)?\.md$/, '')}`
                 // 动态路由存在 params 数据
-                (item as FileInfo).params = dynamicRoute?.params || {}
+                item.params = dynamicRoute?.params || {}
                 // 动态路由存储原始文件名
                 if (dynamicOrigin)
-                  (item as FileInfo).originName = basename(dynamicOrigin)
+                  item.originName = basename(dynamicOrigin)
                 // 读取 md 数据
                 promises.push(
                   getMarkdownData(absolutePath, dynamicRoute?.params).then(({ h1, frontmatter }) => {
@@ -241,25 +240,31 @@ export function AutoNav({
               }
               // 文件夹数据
               else {
-                (item as FolderInfo).children = []
+                item.children = []
               }
             }
 
-            current = (item as FolderInfo).children
+            if (assertFolder(item))
+              current = item.children
+
+            // 只有路径最后一层才是文件
+            function assertFile(item: Item): item is FileInfo {
+              return index === parts.length - 1
+            }
           })
         })
 
       // 等待数据组装完成
       await Promise.allSettled(promises)
       // 数据排序
-      deepSort(cache, comparer)
+      deepSort(cache, cpr)
       // 数据缓存
-      writeFile(join(cacheDir, CACHE_FILE), JSON.stringify(cache, null, 2))
+      writeFile(join(cacheDir, CACHE_FILE), JSON.stringify(cache))
       // 数据处理
-      const sidebar = deepHandle(cache, sidebarItemHandler, rewrites, locales)
-      const nav = deepHandle(cache, navItemHandler, rewrites, locales)
+      const sidebar = deepHandle(cache, sHdr, rewrites, locales)
+      const nav = deepHandle(cache, nHdr, rewrites, locales)
       // 修改配置
-      handler(config, { sidebar, nav, rewrites, locales })
+      hdr(config, { sidebar, nav, rewrites, locales })
     },
   }
 }
