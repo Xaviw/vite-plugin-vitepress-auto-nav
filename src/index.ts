@@ -1,12 +1,12 @@
 import type { Plugin, SiteConfig } from 'vitepress'
 import type { FileInfo, FolderInfo, Item, Options } from './types'
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, utimes, writeFile } from 'node:fs/promises'
 import { basename, join, normalize, sep } from 'node:path'
 import { minimatch } from 'minimatch'
 import { comparer } from './comparer'
 import { handler, navItemHandler, sidebarItemHandler } from './handler'
-import { assertFile, assertFolder, compactCache, debounce, deepHandle, deepSort, getFolderLink, getMarkdownData, getTimestamp } from './utils'
+import { assertFile, assertFolder, compactCache, debounce, deepHandle, deepSort, getFolderLink, getMarkdownData, getTimestamp, hasLocalSearch } from './utils'
 
 export {
   assertFile,
@@ -20,13 +20,15 @@ export {
 
 export type * from './types'
 
-export function AutoNav({
+/**
+ * vitepress 自动生成导航栏和侧边栏的插件
+ */
+export function autoNav({
   exclude = [],
   navItemHandler: nHdr = navItemHandler(),
   sidebarItemHandler: sHdr = sidebarItemHandler(),
   comparer: cpr = comparer(),
   handler: hdr = handler,
-  // summary,
 }: Options = {}): Plugin {
   // 参数校验
   Object.entries({
@@ -45,14 +47,26 @@ export function AutoNav({
   let baseDir: string
   /** 标准化 vitepress 配置文件夹路径 */
   let configDir: string
+  /** 标准化 vitepress 配置文件路径 */
+  let configPath: string
   /** 缓存文件名 */
   const CACHE_FILE = 'auto-nav-cache.json'
+  /**
+   * 时候使用了本地搜索插件
+   * 目前使用了本地搜索插件会导致 restart 报错（https://github.com/vuejs/vitepress/issues/4688）
+   */
+  let userHasLocalSearch = false
 
   return {
     name: 'vite-plugin-vitepress-auto-nav',
     configureServer({ watcher, restart }) {
       // 刷新添加防抖，避免批量操作时频繁触发刷新
-      const debouncedRestart = debounce(restart, 1500)
+      const debouncedRestart = debounce(() => {
+        if (!userHasLocalSearch)
+          restart()
+        else
+          utimes(configPath, new Date(), new Date())
+      }, 1500)
 
       // 非 srcDir 文件夹下的内容不会被监听
       // .vitepress 文件夹在 srcDir 文件夹内时，会被监听，反之不会（.vitepress/cache 文件夹始终不会被监听）
@@ -130,16 +144,21 @@ export function AutoNav({
         root, // D:/vite-plugin-vitepress-auto-nav/example
         srcDir, // D:/vite-plugin-vitepress-auto-nav/example
         cacheDir, // D:/vite-plugin-vitepress-auto-nav/example/.vitepress/cache
+        configPath: cp, // D:/vite-plugin-vitepress-auto-nav/example/.vitepress/config.ts
         pages, // ['a.md', 'b/c.md']，包括动态路由，未处理 rewrites
         rewrites, // { map: { 'x/origin.md': 'x/rewrite.md' }, inv: { 'x/rewrite.md': 'x/origin.md' } }
         dynamicRoutes: { routes }, // [{ path: 'a/b.md', fullPath: 'D:/a/b.md', route: 'a/[name].md', params: { name: 'b' } }]
-        userConfig: { locales }, // { root: { label: '简体中文' }, en: { label: 'English' } }，同用户设置
+        userConfig,
       } = config.vitepress as SiteConfig
+
+      const { locales } = userConfig // { root: { label: '简体中文' }, en: { label: 'English' } }，同用户设置
 
       // 记录关键配置并标准化路径
       baseDir = normalize(srcDir)
       configDir = join(root, '.vitepress')
       cacheDir = normalize(cacheDir)
+      configPath = normalize(cp!) // 使用了本插件则肯定存在配置文件
+      userHasLocalSearch = hasLocalSearch(userConfig)
 
       // 首次尝试从本地读取缓存，后续刷新直接使用读取到的缓存
       if (!cache.length) {

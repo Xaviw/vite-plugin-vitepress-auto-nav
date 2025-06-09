@@ -2,11 +2,11 @@
   "name": "vite-plugin-vitepress-auto-nav",
   "type": "module",
   "version": "4.0.0",
-  "packageManager": "pnpm@10.11.0",
-  "description": "自动生成vitepress的nav与sidebar",
+  "packageManager": "pnpm@10.11.1",
+  "description": "自动生成 vitepress nav 与 sidebar 的插件",
   "author": "xavi",
   "license": "MIT",
-  "homepage": "https://xaviw.github.io/XaviDocs/",
+  "homepage": "https://github.com/Xaviw/vite-plugin-vitepress-auto-nav",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Xaviw/vite-plugin-vitepress-auto-nav.git"
@@ -16,9 +16,6 @@
     "vitepress",
     "vite-plugin",
     "vitepress-plugin",
-    "vitepress-auto",
-    "vitepress-gitbook",
-    "vitepress-summary",
     "auto-nav",
     "auto-sidebar",
     "auto-menu"
@@ -33,13 +30,13 @@
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist",
-    "types"
+    "dist"
   ],
   "engines": {
     "node": ">=18"
   },
   "scripts": {
+    "build": "rollup -c",
     "lint": "eslint . --fix",
     "clean": "npx -y rimraf node_modules dist",
     "taze": "npx -y taze -I",
@@ -57,10 +54,12 @@
   },
   "devDependencies": {
     "@antfu/eslint-config": "^4.13.0",
+    "@rollup/plugin-node-resolve": "^16.0.1",
     "@types/node": "^22.15.18",
     "eslint": "^9.26.0",
     "lint-staged": "^16.0.0",
     "rollup": "^4.40.2",
+    "rollup-plugin-dts": "^6.2.1",
     "rollup-plugin-typescript2": "^0.36.0",
     "simple-git-hooks": "^2.13.0",
     "typescript": "^5.8.3",

@@ -158,23 +158,3 @@ export interface Options<
   handler?: Handler<S, N>
 
 }
-// /** 用于支持从 Gitbook 的 SUMMARY 文件生成 sidebar 与 nav，添加后其他配置将不再生效 */
-// summary?: {
-//   /** SUMMARY.md 文件路径 */
-//   target: string
-//   /**
-//    * 同 SidebarItem.collapsed
-//    *
-//    * 未指定时，不可折叠
-//    *
-//    * 为 true 时，可折叠且默认折叠
-//    *
-//    * 为 false 时，可折叠且默认展开
-//    */
-//   collapsed?: boolean
-//   /**
-//    * 去掉转义字符 "\"
-//    * @default true
-//    */
-//   removeEscape?: boolean
-// }

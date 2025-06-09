@@ -1,4 +1,4 @@
-import type { LocaleConfig, SiteConfig } from 'vitepress'
+import type { LocaleConfig, SiteConfig, UserConfig } from 'vitepress'
 import type { ChildrenLinks, FileInfo, FolderInfo, Item, ItemHandler, Recordable, TimesInfo } from './types'
 import { exec } from 'node:child_process'
 import { readFile, stat } from 'node:fs/promises'
@@ -213,4 +213,21 @@ export function assertFile(item?: Item): item is FileInfo {
 /** 断言数据是文件夹 */
 export function assertFolder(item?: Item): item is FolderInfo {
   return (item as FolderInfo)?.children !== undefined
+}
+
+/** 从 vitepress 原始配置中查找是否使用了本地搜索插件 */
+export function hasLocalSearch(userConfig: UserConfig): boolean {
+  const { search } = userConfig?.themeConfig || {}
+  if (search?.provider === 'local')
+    return true
+
+  // 检查 locales 中是否有使用本地搜索
+  if (userConfig.locales) {
+    for (const locale of Object.values(userConfig.locales)) {
+      if (locale.themeConfig?.search?.provider === 'local')
+        return true
+    }
+  }
+
+  return false
 }

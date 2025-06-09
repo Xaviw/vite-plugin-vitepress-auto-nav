@@ -1,5 +1,5 @@
 import { defineConfig } from 'vitepress'
-import { AutoNav } from '../../src'
+import { autoNav } from '../../src'
 import { comparer } from '../../src/comparer'
 import { navItemHandler, sidebarItemHandler } from '../../src/handler'
 
@@ -19,7 +19,7 @@ export default defineConfig({
   },
   vite: {
     plugins: [
-      AutoNav({
+      autoNav({
         comparer: comparer({
           config: {
             '**/1-2': 0,
