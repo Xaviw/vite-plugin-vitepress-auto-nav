@@ -5,7 +5,7 @@ import { mkdir, readFile, utimes, writeFile } from 'node:fs/promises'
 import { basename, join, normalize, sep } from 'node:path'
 import { minimatch } from 'minimatch'
 import { comparer } from './comparer'
-import { handler, navItemHandler, sidebarItemHandler } from './handler'
+import { navHandler, navItemHandler, sidebarHandler, sidebarItemHandler } from './handler'
 import { assertFile, assertFolder, compactCache, debounce, deepHandle, deepSort, getFolderLink, getMarkdownData, getTimestamp, hasLocalSearch } from './utils'
 
 export {
@@ -13,8 +13,9 @@ export {
   assertFolder,
   comparer,
   getFolderLink,
-  handler,
+  navHandler,
   navItemHandler,
+  sidebarHandler,
   sidebarItemHandler,
 }
 
@@ -28,14 +29,16 @@ export function autoNav({
   navItemHandler: nHdr = navItemHandler(),
   sidebarItemHandler: sHdr = sidebarItemHandler(),
   comparer: cpr = comparer(),
-  handler: hdr = handler,
+  sidebarHandler: shdr = sidebarHandler(),
+  navHandler: nhdr = navHandler(),
 }: Options = {}): Plugin {
   // 参数校验
   Object.entries({
-    navItemHandler: nHdr,
-    sidebarItemHandler: sHdr,
+    nHdr,
+    sHdr,
     comparer,
-    handler: hdr,
+    shdr,
+    nhdr,
   }).forEach(([key, value]) => {
     if (typeof value !== 'function')
       throw new TypeError(`${key} 必须是一个函数`)
@@ -283,7 +286,8 @@ export function autoNav({
       const sidebar = deepHandle(cache, sHdr, rewrites, locales)
       const nav = deepHandle(cache, nHdr, rewrites, locales)
       // 修改配置
-      hdr(config, { sidebar, nav, rewrites, locales })
+      shdr(config, sidebar, { locales, rewrites })
+      nhdr(config, nav, { locales, rewrites })
     },
   }
 }

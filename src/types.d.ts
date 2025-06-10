@@ -81,41 +81,35 @@ export interface ChildrenLinks {
   rewrites: string[]
 }
 
+/** 自定义处理方法可用参数 */
+export interface HandlerOptions {
+  /** vitepress rewrites 配置 */
+  rewrites: SiteConfig['rewrites']
+  /** vitepress 国际化配置 */
+  locales?: LocaleConfig
+}
+
 /** 文件或文件夹数据转换为 vitepress 配置的处理方法（返回 false 表示忽略该文件或文件夹） */
 export type ItemHandler<T extends Recordable = Recordable> = (
-  options: {
+  options: HandlerOptions & {
     /** 文件或文件夹数据 */
     item: Item
     /** 文件夹子数据数组 */
     children?: T[]
     /** 文件夹下所有普通路径和 rewrite 路径 */
     childrenLinks?: ChildrenLinks
-    /** vitepress 国际化配置 */
-    locales?: LocaleConfig
-    /** vitepress rewrites 配置 */
-    rewrites: SiteConfig['rewrites']
   }
 ) => T | false
 
 /** ItemHandler 处理后的数据应用到 vitepress 配置的方法 */
-export type Handler<
-  S extends Recordable = DefaultTheme.SidebarItem | DefaultTheme.SidebarMulti,
-  N extends Recordable = DefaultTheme.NavItemWithLink | DefaultTheme.NavItemWithChildren,
-> = (
+export type Handler<T extends Recordable = Recordable> = (
 /** vitepress 原始配置 */
   config: VitepressUserConfig,
-  /** 插件生成的配置 */
-  data: {
-    /** ItemHandler 处理后的数据组成的数组 */
-    sidebar: S[]
-    /** ItemHandler 处理后的数据组成的数组 */
-    nav: N[]
-    /** vitepress rewrites 配置 */
-    rewrites: SiteConfig['rewrites']
-    /** vitepress 国际化配置 */
-    locales?: LocaleConfig
-  }
-) => MaybePromise<Omit<VitepressUserConfig, 'plugins'>>
+  /** ItemHandler 返回值组成的数组 */
+  data: T[],
+  /** 可用配置 */
+  options: HandlerOptions
+) => MaybePromise<void>
 
 /** 插件配置项 */
 export interface Options<
@@ -143,6 +137,7 @@ export interface Options<
    * 返回 false 会忽略生成该项
    */
   sidebarItemHandler?: ItemHandler<S>
+  sidebarHandler?: Handler<S>
 
   /**
    * 每一项文件或文件夹生成为 navItem 的方法
@@ -155,6 +150,6 @@ export interface Options<
   /**
    * 解析得到 sidebar、nav 后合并到 vitepress 配置的方法
    */
-  handler?: Handler<S, N>
+  navHandler?: Handler<N>
 
 }
