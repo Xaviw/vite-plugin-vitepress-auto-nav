@@ -1,7 +1,7 @@
 import type { UserConfig } from 'vite'
-import type { DefaultTheme, LocaleConfig, SiteConfig } from 'vitepress'
+import type { LocaleConfig, SiteConfig } from 'vitepress'
 
-export type Recordable = Record<string, any>
+export type Recordable<T = any> = Record<string, T>
 
 export type MaybePromise<T> = T | Promise<T>
 
@@ -90,7 +90,7 @@ export interface HandlerOptions {
 }
 
 /** 文件或文件夹数据转换为 vitepress 配置的处理方法（返回 false 表示忽略该文件或文件夹） */
-export type ItemHandler<T extends Recordable = Recordable> = (
+export type ItemHandler<T> = (
   options: HandlerOptions & {
     /** 文件或文件夹数据 */
     item: Item
@@ -102,7 +102,7 @@ export type ItemHandler<T extends Recordable = Recordable> = (
 ) => T | false
 
 /** ItemHandler 处理后的数据应用到 vitepress 配置的方法 */
-export type Handler<T extends Recordable = Recordable> = (
+export type Handler<T> = (
 /** vitepress 原始配置 */
   config: VitepressUserConfig,
   /** ItemHandler 返回值组成的数组 */
@@ -112,10 +112,7 @@ export type Handler<T extends Recordable = Recordable> = (
 ) => MaybePromise<void>
 
 /** 插件配置项 */
-export interface Options<
-  S extends Recordable = DefaultTheme.SidebarItem | DefaultTheme.SidebarMulti,
-  N extends Recordable = DefaultTheme.NavItemWithLink | DefaultTheme.NavItemWithChildren,
-> {
+export interface Options<S = any, N = any> {
   /**
    * glob 表达式字符串数组，用于排除某些文件或文件夹
    * @remark
@@ -151,5 +148,4 @@ export interface Options<
    * 解析得到 sidebar、nav 后合并到 vitepress 配置的方法
    */
   navHandler?: Handler<N>
-
 }

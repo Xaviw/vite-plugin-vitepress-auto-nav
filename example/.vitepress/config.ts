@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitepress'
 import { autoNav } from '../../src'
-import { comparer } from '../../src/comparer'
-import { navItemHandler, sidebarItemHandler } from '../../src/handler'
+import { defaultComparer } from '../../src/comparer'
+import { defaultNavItemHandler, defaultSidebarItemHandler } from '../../src/handler'
 
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
@@ -20,17 +20,17 @@ export default defineConfig({
   vite: {
     plugins: [
       autoNav({
-        comparer: comparer({
+        comparer: defaultComparer({
           config: {
             '**/1-2': 0,
           },
         }),
-        sidebarItemHandler: sidebarItemHandler({
+        sidebarItemHandler: defaultSidebarItemHandler({
           config: {
             '**/1-2/1-2-3': { collapsed: false },
           },
         }),
-        navItemHandler: navItemHandler({
+        navItemHandler: defaultNavItemHandler({
           config: {
             '**/1-4': { hide: true },
           },

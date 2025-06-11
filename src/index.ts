@@ -4,19 +4,19 @@ import { existsSync } from 'node:fs'
 import { mkdir, readFile, utimes, writeFile } from 'node:fs/promises'
 import { basename, join, normalize, sep } from 'node:path'
 import { minimatch } from 'minimatch'
-import { comparer } from './comparer'
-import { navHandler, navItemHandler, sidebarHandler, sidebarItemHandler } from './handler'
+import { defaultComparer } from './comparer'
+import { defaultNavHandler, defaultNavItemHandler, defaultSidebarHandler, defaultSidebarItemHandler } from './handler'
 import { assertFile, assertFolder, compactCache, debounce, deepHandle, deepSort, getFolderLink, getMarkdownData, getTimestamp, hasLocalSearch } from './utils'
 
 export {
   assertFile,
   assertFolder,
-  comparer,
+  defaultComparer,
+  defaultNavHandler,
+  defaultNavItemHandler,
+  defaultSidebarHandler,
+  defaultSidebarItemHandler,
   getFolderLink,
-  navHandler,
-  navItemHandler,
-  sidebarHandler,
-  sidebarItemHandler,
 }
 
 export type * from './types'
@@ -26,19 +26,19 @@ export type * from './types'
  */
 export function autoNav({
   exclude = [],
-  navItemHandler: nHdr = navItemHandler(),
-  sidebarItemHandler: sHdr = sidebarItemHandler(),
-  comparer: cpr = comparer(),
-  sidebarHandler: shdr = sidebarHandler(),
-  navHandler: nhdr = navHandler(),
+  navItemHandler = defaultNavItemHandler(),
+  sidebarItemHandler = defaultSidebarItemHandler(),
+  comparer = defaultComparer(),
+  sidebarHandler = defaultSidebarHandler(),
+  navHandler = defaultNavHandler(),
 }: Options = {}): Plugin {
   // 参数校验
   Object.entries({
-    nHdr,
-    sHdr,
-    comparer,
-    shdr,
-    nhdr,
+    navItemHandler,
+    sidebarItemHandler,
+    defaultComparer,
+    sidebarHandler,
+    navHandler,
   }).forEach(([key, value]) => {
     if (typeof value !== 'function')
       throw new TypeError(`${key} 必须是一个函数`)
@@ -279,15 +279,15 @@ export function autoNav({
       // 等待数据组装完成
       await Promise.allSettled(promises)
       // 数据排序
-      deepSort(cache, cpr)
+      deepSort(cache, comparer)
       // 数据缓存
       writeFile(join(cacheDir, CACHE_FILE), JSON.stringify(cache))
       // 数据处理
-      const sidebar = deepHandle(cache, sHdr, rewrites, locales)
-      const nav = deepHandle(cache, nHdr, rewrites, locales)
+      const sidebar = deepHandle(cache, sidebarItemHandler, rewrites, locales)
+      const nav = deepHandle(cache, navItemHandler, rewrites, locales)
       // 修改配置
-      shdr(config, sidebar, { locales, rewrites })
-      nhdr(config, nav, { locales, rewrites })
+      sidebarHandler(config, sidebar, { locales, rewrites })
+      navHandler(config, nav, { locales, rewrites })
     },
   }
 }

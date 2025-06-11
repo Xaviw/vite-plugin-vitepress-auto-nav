@@ -10,7 +10,7 @@ import { minimatch } from 'minimatch'
  * @param options.config 自定义排序权重配置对象，键为 glob 表达式字符串（通过 [minimatch](https://github.com/isaacs/minimatch) 进行判断，仅最后一条匹配的配置生效；键需要以页面实际访问路径为准，文件需要包含扩展名 '.md'），值为权重，例如 `{ '/a/b.md': 1, '/c': 2 }`
  * @param options.order 排序方式，默认 'asc' 升序
  */
-export function comparer(
+export function defaultComparer(
   {
     key = 'sort',
     config = {},

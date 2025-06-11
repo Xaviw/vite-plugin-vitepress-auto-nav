@@ -1,5 +1,5 @@
 import type { DefaultTheme } from 'vitepress'
-import type { Handler, Item, ItemHandler } from './types'
+import type { FileInfo, Handler, Item, ItemHandler } from './types'
 import { minimatch } from 'minimatch'
 import { assertFile, assertFolder, getFolderLink } from './utils'
 
@@ -12,6 +12,14 @@ interface ItemHandlerOptions {
   hide?: boolean
 }
 
+type SidebarItem = Omit<Item, 'children' | 'link'> & {
+  originLink?: string
+  link?: string
+  children?: SidebarItem[]
+  text?: string
+  collapsed?: boolean
+}
+
 /**
  * 页面数据生成 sidebarItem 的方法，兼容部分 v3 配置
  * @remark
@@ -20,7 +28,7 @@ interface ItemHandlerOptions {
  * @param options.config 键为 glob 表达式字符串（通过 [minimatch](https://github.com/isaacs/minimatch) 进行判断，仅最后一条匹配的配置生效；如果存在动态路由或 rewrites，键需要以页面实际访问路径为准，文件需要包含扩展名 `.md`），值为配置对象，例如 `{ '/a/b/*.md': { hide: true } }`
  * @param options.frontmatterPrefix frontmatter 中配置属性的前缀（不影响 options 配置中的属性名），例如设置为 `a_`，则会从 frontmatter 中获取 `a_title` 作为自定义显示名称
  */
-export function sidebarItemHandler(
+export function defaultSidebarItemHandler(
   {
     config = {},
     frontmatterPrefix = '',
@@ -31,7 +39,7 @@ export function sidebarItemHandler(
     }>
     frontmatterPrefix?: string
   } = {},
-): ItemHandler<Item & DefaultTheme.SidebarItem> {
+): ItemHandler<SidebarItem> {
   return ({ item, children }) => {
     const isFile = assertFile(item)
 
@@ -59,11 +67,12 @@ export function sidebarItemHandler(
 
     return {
       ...item,
+      originLink: (item as FileInfo).link,
+      children,
       text: title || item.name.replace(/\.md$/, ''),
       link: isFile
         ? item.link
-        : getFolderLink(item, true)!,
-      items: children,
+        : getFolderLink(item, true),
       collapsed: options.collapsed,
     }
   }
@@ -72,52 +81,58 @@ export function sidebarItemHandler(
 /**
  * 将 sidebarItemHandler 生成的 sidebar 数据应用到 vitepress 配置中
  */
-export function sidebarHandler(): Handler<Item & DefaultTheme.SidebarItem> {
+export function defaultSidebarHandler(): Handler<SidebarItem> {
+  function setter(data: SidebarItem[], map: Record<string, string | undefined>): DefaultTheme.SidebarMulti {
+    return data.reduce<DefaultTheme.SidebarMulti>((p, c) => {
+      if (c.children) {
+        p[`${c.path}/`] = c.children
+        Object.entries(map).forEach(([origin, rewrite]) => {
+          if (rewrite && `/${origin}`.startsWith(c.path)) {
+            p[rewrite.replace(/\.md$/, '')] = c.children!
+          }
+        })
+      }
+      else if (c.link) {
+        (p['/'] as DefaultTheme.SidebarItem[]).push(c)
+      }
+      return p
+    }, { '/': [] })
+  }
+
   return (config, data, { locales, rewrites: { map } }) => {
-    if (!config.vitepress.site.themeConfig)
-      config.vitepress.site.themeConfig = {}
+    const site = config.vitepress.site
+    if (!site.themeConfig)
+      site.themeConfig = {}
 
     if (!locales?.root) {
-      config.vitepress.site.themeConfig.sidebar = data.reduce<DefaultTheme.SidebarMulti>((p, c) => {
-        if (c.items?.length) {
-          p[`${c.path}/`] = c.items
-          Object.entries(map).forEach(([origin, rewrite]) => {
-            if (rewrite && `/${origin}`.startsWith(c.path)) {
-              p[rewrite] = c.items!
-            }
-          })
-        }
-        if (c.link) {
-          (p['/'] as DefaultTheme.SidebarItem[]).push({ ...c, items: undefined })
-        }
-        return p
-      }, { '/': [] })
+      site.themeConfig.sidebar = setter(data, map)
     }
     else {
-      const localesObject = config.vitepress.site.locales
+      const localesObject = site.locales
       const localeKeys = Object.keys(locales)
       localeKeys.forEach((locale) => {
         if (!localesObject[locale].themeConfig) {
           localesObject[locale].themeConfig = {}
         }
       })
+      if (!site.themeConfig.sidebar) {
+        site.themeConfig.sidebar = { '/': [] }
+      }
 
       data.forEach((item) => {
+        if (!item.children?.length) {
+          site.themeConfig.sidebar['/'].push(item)
+          return
+        }
+
         if (localeKeys.includes(item.name)) {
-          localesObject[item.name].themeConfig.sidebar = {
-            '/': item.items,
-          }
-          Object.entries(map).forEach(([origin, rewrite]) => {
-            if (rewrite && origin.startsWith(item.name)) {
-              localesObject[item.name].themeConfig.sidebar[rewrite] = item.items
-            }
-          })
+          localesObject[item.name].themeConfig.sidebar = setter(item.children, map)
         }
         else {
-          config.vitepress.site.themeConfig.sidebar = [
-            ...(config.vitepress.site.themeConfig.sidebar || []),
-            ...(item.items?.length ? (item.items || []) : [item]),
-          ]
+          site.themeConfig.sidebar = {
+            ...site.themeConfig.sidebar,
+            ...setter(item.children, map),
+          }
         }
       })
     }
@@ -133,7 +148,7 @@ export function sidebarHandler(): Handler<Item & DefaultTheme.SidebarItem> {
  * @param options.frontmatterPrefix frontmatter 中配置属性的前缀（不影响 options 配置中的属性名），例如设置为 `a_`，则会从 frontmatter 中获取 `a_title` 作为自定义显示名称
  * @param options.depth 最大显示层级（从 0 开始，存在国际化配置时会忽略首层），默认为 0
  */
-export function navItemHandler(
+export function defaultNavItemHandler(
   {
     config = {},
     frontmatterPrefix = '',
@@ -210,7 +225,7 @@ export function navItemHandler(
 }
 
 /** 应用生成的数据到配置中 */
-export function navHandler(): Handler<DefaultTheme.NavItemWithLink | DefaultTheme.NavItemWithChildren> {
+export function defaultNavHandler(): Handler<DefaultTheme.NavItemWithLink | DefaultTheme.NavItemWithChildren> {
   return (config, data) => {
     config.vitepress.site.themeConfig.nav = data
   }
