@@ -43,16 +43,16 @@ export async function getMarkdownData(path: string, params: Recordable = {}): Pr
  * 文件夹中存在 index.md 时，返回文件夹自身路径；否则返回第一篇子 md 路径（若有），或第一个子文件夹下的第一篇 md 路径
  * @example
  * ```ts
- * getFolderLink(folderData) // 可能返回 `/folder/` 或 `/folder/sub/anyMd`
+ * getFolderLink(folderData) // 可能返回 `/folder/index` 或 `/folder/sub/anyMd`
  * ```
  */
 export function getFolderLink(item: FolderInfo, onlyIndex: boolean = false): string | undefined {
   if (!item.children?.length)
     return
 
-  const index = item.children.find(i => assertFile(i) && i.name === 'index.md') as FileInfo | undefined
+  const index = item.children.find(i => assertFile(i) && i.link.endsWith('/index')) as FileInfo | undefined
   if (index)
-    return index.link
+    return index.link.replace(/index$/, '')
   else if (onlyIndex)
     return
 
@@ -194,7 +194,7 @@ export function getChildrenLinks(items: Item[], inv: SiteConfig['rewrites']['inv
       rewrites.push(...r)
     }
     else {
-      if (inv[`${item.link.slice(1)}${item.name === 'index.md' ? 'index' : ''}.md`]) {
+      if (inv[`${item.link.slice(1)}.md`]) {
         rewrites.push(item.link)
       }
       else {

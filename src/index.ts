@@ -1,13 +1,13 @@
 import type { Plugin, SiteConfig } from 'vitepress'
-import type { FileInfo, FolderInfo, Item, Options } from './types'
+import type { FileInfo, Item, Options } from './types'
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, utimes, writeFile } from 'node:fs/promises'
 import { basename, join, normalize, sep } from 'node:path'
-import { minimatch } from 'minimatch'
 import { defaultComparer } from './comparer'
 import { defaultNavHandler, defaultNavItemHandler, defaultSidebarHandler, defaultSidebarItemHandler } from './handler'
 import { assertFile, assertFolder, compactCache, debounce, deepHandle, deepSort, getFolderLink, getMarkdownData, getTimestamp, hasLocalSearch } from './utils'
 
+// 导出工具方法
 export {
   assertFile,
   assertFolder,
@@ -19,13 +19,13 @@ export {
   getFolderLink,
 }
 
+// 导出类型
 export type * from './types'
 
 /**
  * vitepress 自动生成导航栏和侧边栏的插件
  */
 export function autoNav({
-  exclude = [],
   navItemHandler = defaultNavItemHandler(),
   sidebarItemHandler = defaultSidebarItemHandler(),
   comparer = defaultComparer(),
@@ -46,35 +46,35 @@ export function autoNav({
 
   /** 缓存数据 */
   let cache: Item[] = []
-  /** 标准化 srcDir 路径 */
+  /** srcDir 路径 */
   let baseDir: string
-  /** 标准化 vitepress 配置文件夹路径 */
+  /** vitepress 配置文件夹路径 */
   let configDir: string
-  /** 标准化 vitepress 配置文件路径 */
+  /** vitepress 配置文件路径 */
   let configPath: string
   /** 缓存文件名 */
   const CACHE_FILE = 'auto-nav-cache.json'
   /**
-   * 时候使用了本地搜索插件
+   * 是否使用了本地搜索插件
    * 目前使用了本地搜索插件会导致 restart 报错（https://github.com/vuejs/vitepress/issues/4688）
    */
-  let userHasLocalSearch = false
+  let hasLocalSearchPlugin = false
 
   return {
     name: 'vite-plugin-vitepress-auto-nav',
     configureServer({ watcher, restart }) {
       // 刷新添加防抖，避免批量操作时频繁触发刷新
       const debouncedRestart = debounce(() => {
-        if (!userHasLocalSearch)
+        if (!hasLocalSearchPlugin)
           restart()
         else
+          // 通过修改配置文件触发强制刷新
           utimes(configPath, new Date(), new Date())
       }, 1500)
 
-      // 非 srcDir 文件夹下的内容不会被监听
+      // 非 srcDir 文件夹下的内容不会被监听（但是被监听文件引用的外部文件会被监听）
       // .vitepress 文件夹在 srcDir 文件夹内时，会被监听，反之不会（.vitepress/cache 文件夹始终不会被监听）
       // 修改配置文件会触发整体刷新（插件函数会重新运行）；如果配置文件在 srcDir 文件夹内，还会触发 change 事件；刷新过程中 .vitepress 目录下还可能会有新增临时文件触发 add 事件（但没有删除、修改等事件）
-      // 被监听的文件引用的外部文件也会被监听
       // 新增文件时，如果有自动保存，会在 add 事件后触发 change 事件
       // 删除文件夹时，每个子文件和子文件夹都会触发删除事件（顺序不固定）
       watcher.on('all', async (eventName, path) => {
@@ -85,9 +85,12 @@ export function autoNav({
         if (
           !baseDir
           || !configDir
-          || eventName === 'addDir' // 忽略新增目录，在新增文件时再处理
-          || path.startsWith(configDir) // 忽略配置目录下的文件监听
-          || !path.startsWith(baseDir) // 忽略非 srcDir 目录下的文件监听
+          // 忽略新增目录，在新增文件时再处理
+          || eventName === 'addDir'
+          // 忽略配置目录下的文件监听
+          || path.startsWith(configDir)
+          // 忽略非 srcDir 目录下的文件监听
+          || !path.startsWith(baseDir)
           // 仅监听 md 文件与路径加载器文件
           // 路径加载器引用了外部文件的情况未考虑
           || !(path.endsWith('.md') || dynamicLoaderRe.test(path))
@@ -97,43 +100,44 @@ export function autoNav({
 
         // md 文件修改同步操作缓存，减少计算量
         if (path.endsWith('.md') && eventName === 'change') {
+          // 存储当前级别对象，可以直接操作
           let current = cache
-          const parts = path.replace(`${baseDir}${sep}`, '').split(sep)
 
+          // 按路径级别操作每一级缓存数据
+          const parts = path.replace(`${baseDir}${sep}`, '').split(sep)
           for (let i = 0; i < parts.length; i++) {
             const part = parts[i]
 
-            // 同名文件、文件夹可以通过扩展名区分
-            // 动态路由文件通过 originName 匹配数据
-            const targetIndex = current.findIndex(data => (data as FileInfo).originName || data.name === part)
-            if (targetIndex < 0)
+            // 查找是否有缓存
+            // 同名文件、文件夹可以通过扩展名区分；动态路由文件可能有多个，通过 originName 匹配数据
+            const searchedIndexes = current.reduce<number[]>((p, c, i) => {
+              if ((c as FileInfo).originName || c.name === part)
+                p.push(i)
+              return p
+            }, [])
+            if (!searchedIndexes.length)
               return
 
-            // 最后一层为 md 文件
-            if (i === parts.length - 1) {
-              const { frontmatter, h1 } = current[targetIndex] as FileInfo
-              const newData = await getMarkdownData(path)
-              // frontmatter 未变更时，忽略
-              if (JSON.stringify({ frontmatter, h1 }) === JSON.stringify(newData)) {
-                return
-              }
-              // 否则更新缓存数据，存在动态路由时需要将对应的动态页面数据全部更新
-              else {
-                circularUpdate(targetIndex)
+            searchedIndexes.forEach(async (searchedIndex) => {
+              // 更新缓存中的 localModifyTime
+              current[searchedIndex].timesInfo.localModifyTime = Date.now()
 
-                function circularUpdate(index: number): void {
-                  (current[index] as FileInfo).frontmatter = newData.frontmatter;
-                  (current[index] as FileInfo).h1 = newData.h1
-                  // 循环更新动态路由生成的文件数据
-                  const newIndex = current.slice(index + 1).findIndex(data => (data as FileInfo).originName || data.name === part)
-                  if (newIndex >= 0)
-                    circularUpdate(index + 1 + newIndex)
+              // 路径最后一层为 md 文件
+              if (partsAssertFile(i, parts, current[searchedIndex])) {
+                const { frontmatter, h1 } = current[searchedIndex]
+                const newData = await getMarkdownData(path)
+
+                // frontmatter 未变更时，忽略
+                if (JSON.stringify({ frontmatter, h1 }) !== JSON.stringify(newData)) {
+                  current[searchedIndex].frontmatter = newData.frontmatter
+                  current[searchedIndex].h1 = newData.h1
                 }
               }
-            }
-            else {
-              current = (current[targetIndex] as FolderInfo).children
-            }
+              // 其他层均为文件夹
+              else {
+                current = current[searchedIndex].children
+              }
+            })
           }
         }
 
@@ -161,7 +165,7 @@ export function autoNav({
       configDir = join(root, '.vitepress')
       cacheDir = normalize(cacheDir)
       configPath = normalize(cp!) // 使用了本插件则肯定存在配置文件
-      userHasLocalSearch = hasLocalSearch(userConfig)
+      hasLocalSearchPlugin = hasLocalSearch(userConfig)
 
       // 首次尝试从本地读取缓存，后续刷新直接使用读取到的缓存
       if (!cache.length) {
@@ -189,21 +193,6 @@ export function autoNav({
 
       // 遍历文章
       pages
-        // 处理 exclude
-        .filter((path) => {
-          if (!Array.isArray(exclude))
-            return true
-
-          // exclude 需要判断动态路由的源路径
-          const dynamicOrigin = routes.find(data => data.path === path)?.route
-
-          return !exclude.some((pattern) => {
-            if (typeof pattern !== 'string')
-              return false
-
-            return minimatch(dynamicOrigin || path, pattern)
-          })
-        })
         // 收集数据
         .forEach((path) => {
           let current = cache
@@ -244,9 +233,9 @@ export function autoNav({
               )
 
               // 文件数据
-              if (assertFile(item)) {
+              if (partsAssertFile(index, parts, item)) {
                 // 处理 rewrite 以及 index.md
-                item.link = `/${(rewrite || path).replace(/(index)?\.md$/, '')}`
+                item.link = `/${(rewrite || path).replace(/\.md$/, '')}`
                 // 动态路由存在 params 数据
                 item.params = dynamicRoute?.params || {}
                 // 动态路由存储原始文件名
@@ -268,11 +257,6 @@ export function autoNav({
 
             if (assertFolder(item))
               current = item.children
-
-            // 只有路径最后一层才是文件
-            function assertFile(item: Item): item is FileInfo {
-              return index === parts.length - 1
-            }
           })
         })
 
@@ -281,7 +265,7 @@ export function autoNav({
       // 数据排序
       deepSort(cache, comparer)
       // 数据缓存
-      writeFile(join(cacheDir, CACHE_FILE), JSON.stringify(cache))
+      writeFile(join(cacheDir, CACHE_FILE), JSON.stringify({ cache, rewrites }))
       // 数据处理
       const sidebar = deepHandle(cache, sidebarItemHandler, rewrites, locales)
       const nav = deepHandle(cache, navItemHandler, rewrites, locales)
@@ -290,4 +274,9 @@ export function autoNav({
       navHandler(config, nav, { locales, rewrites })
     },
   }
+}
+
+// 只有路径最后一层才是文件
+function partsAssertFile(index: number, parts: string[], item: Item): item is FileInfo {
+  return index === parts.length - 1
 }

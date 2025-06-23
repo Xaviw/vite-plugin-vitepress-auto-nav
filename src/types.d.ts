@@ -46,7 +46,7 @@ interface BaseInfo {
 /** 文件数据 */
 export interface FileInfo extends BaseInfo {
   /**
-   * 访问链接，支持动态路由以及 rewrites（以 '/' 开头以及分隔，不含扩展名）
+   * 访问链接，动态路由以及 rewrites 为生成后的链接（以 '/' 开头以及分隔，不含扩展名）
    */
   link: string
   /**
@@ -114,15 +114,6 @@ export type Handler<T> = (
 /** 插件配置项 */
 export interface Options<S = any, N = any> {
   /**
-   * glob 表达式字符串数组，用于排除某些文件或文件夹
-   * @remark
-   * 通过 [minimatch](https://github.com/isaacs/minimatch) 进行判断；
-   * 排除的页面还是能够通过链接访问，如果希望彻底排除，请使用 vitepress 的 srcExclude 配置；
-   * 空文件夹始终会被排除
-   */
-  exclude?: string[]
-
-  /**
    * 自定义排序方法，同级文件、文件夹会调用这个函数进行排序
    */
   comparer?: Comparer
@@ -134,6 +125,10 @@ export interface Options<S = any, N = any> {
    * 返回 false 会忽略生成该项
    */
   sidebarItemHandler?: ItemHandler<S>
+
+  /**
+   * 解析得到 sidebar 后合并到 vitepress 配置的方法
+   */
   sidebarHandler?: Handler<S>
 
   /**
@@ -145,7 +140,7 @@ export interface Options<S = any, N = any> {
   navItemHandler?: ItemHandler<N>
 
   /**
-   * 解析得到 sidebar、nav 后合并到 vitepress 配置的方法
+   * 解析得到 nav 后合并到 vitepress 配置的方法
    */
   navHandler?: Handler<N>
 }

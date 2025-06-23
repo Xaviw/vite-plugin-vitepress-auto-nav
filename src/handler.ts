@@ -46,8 +46,7 @@ export function defaultSidebarItemHandler(
     // 查找匹配的配置
     const [_, options = {}]
       = Object.entries(config)
-        .reverse()
-        .find(([pattern]) => {
+        .findLast(([pattern]) => {
           return minimatch(isFile ? `${item.link}.md` : item.path, pattern)
         }) || []
 
@@ -55,14 +54,13 @@ export function defaultSidebarItemHandler(
 
     const hide = options.hide || frontmatter[`${frontmatterPrefix}hide`]
     // index.md 链接作用于文件夹，不再单独展示
-    if (item.name === 'index.md' || hide)
+    if (hide || (isFile && item.link.endsWith('/index')))
       return false
 
     let title = options.title || frontmatter[`${frontmatterPrefix}title`]
     // 文件未设置 title 时，还需要判断是否 useMarkdownTitle
-    if (!title && isFile) {
-      if (options.useMarkdownTitle || frontmatter[`${frontmatterPrefix}useMarkdownTitle`])
-        title = item.h1
+    if (!title && isFile && (options.useMarkdownTitle || frontmatter[`${frontmatterPrefix}useMarkdownTitle`])) {
+      title = item.h1
     }
 
     return {
@@ -80,60 +78,61 @@ export function defaultSidebarItemHandler(
 
 /**
  * 将 sidebarItemHandler 生成的 sidebar 数据应用到 vitepress 配置中
+ * @remark
+ * 第一层文件夹单独作为 SidebarMulti，第一层文件作为根 SidebarMulti（包括第一层文件夹下的 index 路由）
  */
-export function defaultSidebarHandler(): Handler<SidebarItem> {
-  function setter(data: SidebarItem[], map: Record<string, string | undefined>): DefaultTheme.SidebarMulti {
-    return data.reduce<DefaultTheme.SidebarMulti>((p, c) => {
-      if (c.children) {
-        p[`${c.path}/`] = c.children
-        Object.entries(map).forEach(([origin, rewrite]) => {
-          if (rewrite && `/${origin}`.startsWith(c.path)) {
-            p[rewrite.replace(/\.md$/, '')] = c.children!
-          }
-        })
-      }
-      else if (c.link) {
-        (p['/'] as DefaultTheme.SidebarItem[]).push(c)
-      }
-      return p
-    }, { '/': [] })
+export function defaultSidebarHandler(
+  {
+    useMulti,
+  }: {
+    /**
+     * 是否将首层文件夹单独设置为 SidebarMulti
+     */
+    useMulti?: boolean
+  } = {},
+): Handler<SidebarItem> {
+  function generater(data: SidebarItem[]): DefaultTheme.SidebarMulti | DefaultTheme.SidebarItem[] {
+    if (useMulti) {
+      return data.reduce<DefaultTheme.SidebarMulti>((p, c) => {
+        // 忽略被 rewrite 的起始路径不一致的情况
+        if (c.children)
+          p[`${c.path}/`] = c.children
+        return p
+      }, {})
+    }
+    else {
+      return data
+    }
   }
 
-  return (config, data, { locales, rewrites: { map } }) => {
+  return (config, data, { locales }) => {
     const site = config.vitepress.site
     if (!site.themeConfig)
       site.themeConfig = {}
 
+    // 未使用国际化
     if (!locales?.root) {
-      site.themeConfig.sidebar = setter(data, map)
+      site.themeConfig.sidebar = generater(data)
     }
+    // 使用了国际化
     else {
       const localesObject = site.locales
       const localeKeys = Object.keys(locales)
       localeKeys.forEach((locale) => {
-        if (!localesObject[locale].themeConfig) {
+        // root 语言映射到根配置
+        if (locale === 'root')
+          localesObject[locale].themeConfig = site.themeConfig
+        // 其他直接在语言下配置
+        else if (!localesObject[locale].themeConfig)
           localesObject[locale].themeConfig = {}
-        }
       })
-      if (!site.themeConfig.sidebar) {
-        site.themeConfig.sidebar = { '/': [] }
-      }
 
       data.forEach((item) => {
-        if (!item.children?.length) {
-          site.themeConfig.sidebar['/'].push(item)
+        // 忽略与配置语言不匹配的页面
+        if (!localeKeys.includes(item.name) || !item.children?.length)
           return
-        }
 
-        if (localeKeys.includes(item.name)) {
-          localesObject[item.name].themeConfig.sidebar = setter(item.children, map)
-        }
-        else {
-          site.themeConfig.sidebar = {
-            ...site.themeConfig.sidebar,
-            ...setter(item.children, map),
-          }
-        }
+        localesObject[item.name].themeConfig.sidebar = generater(item.children)
       })
     }
   }
@@ -146,32 +145,31 @@ export function defaultSidebarHandler(): Handler<SidebarItem> {
  * @param options
  * @param options.config 键为 glob 表达式字符串（通过 [minimatch](https://github.com/isaacs/minimatch) 进行判断，仅最后一条匹配的配置生效；键需要以页面实际访问路径为准，文件需要包含扩展名 '.md'），值为配置对象，例如 `{ '/a/b/*.md': { hide: true } }`
  * @param options.frontmatterPrefix frontmatter 中配置属性的前缀（不影响 options 配置中的属性名），例如设置为 `a_`，则会从 frontmatter 中获取 `a_title` 作为自定义显示名称
- * @param options.depth 最大显示层级（从 0 开始，存在国际化配置时会忽略首层），默认为 0
  */
 export function defaultNavItemHandler(
   {
     config = {},
     frontmatterPrefix = '',
-    depth = 0,
   }: {
     config?: Record<string, ItemHandlerOptions>
     frontmatterPrefix?: string
-    depth?: number
   } = {},
 ): ItemHandler<DefaultTheme.NavItemWithLink | DefaultTheme.NavItemWithChildren> {
-  return ({ item, children, locales, childrenLinks }) => {
-    const MAX_DEPTH = depth + (locales ? 1 : 0)
+  return ({ item, children, locales }) => {
     const isFile = assertFile(item)
-
-    const frontmatter = isFile ? item.frontmatter : {}
+    const hasLocale = !!locales?.root
 
     // 查找匹配的配置
-    const [_, options = {}] = Object.entries(config).reverse().find(([pattern]) => {
-      return minimatch(isFile ? `${item.link}.md` : item.path, pattern)
-    }) || []
+    const [_, options = {}] = Object
+      .entries(config)
+      .findLast(([pattern]) => {
+        return minimatch(isFile ? `${item.link}.md` : item.path, pattern)
+      }) || []
 
+    const frontmatter = isFile ? item.frontmatter : {}
     const hide = options.hide || frontmatter[`${frontmatterPrefix}hide`]
-    if (item.name === 'index.md' || hide || item.depth > MAX_DEPTH)
+
+    if ((hasLocale ? item.depth > 1 : item.depth > 0) || item.name === 'index.md' || hide)
       return false
 
     let title = options.title || frontmatter[`${frontmatterPrefix}title`]
@@ -186,41 +184,20 @@ export function defaultNavItemHandler(
     }
 
     // 国际化首层
-    if (locales && item.depth === 0) {
+    if (locales?.root && item.depth === 0) {
       return {
         text: item.name,
         items: children,
       } as DefaultTheme.NavItemWithChildren
     }
 
-    const matches = new Set()
-    if (childrenLinks?.notRewrites.length) {
-      matches.add(`${item.path}/`)
-    }
-    if (childrenLinks?.rewrites.length) {
-      childrenLinks.rewrites.forEach((rewrite) => {
-        matches.add(rewrite)
-      })
-    }
-    if (isFile) {
-      matches.add(link)
-    }
-    const activeMatch = `^${Array.from(matches).join('|')}`.replace(/\//g, '\\/')
+    const activeMatch = `^${item.path}`.replace(/\//g, '\\/')
 
-    // 文件或最后一层
-    if (!children?.length || item.depth === MAX_DEPTH) {
-      return {
-        text: title || item.name.replace(/\.md$/, ''),
-        link,
-        activeMatch,
-      } as DefaultTheme.NavItemWithLink
-    }
-    // 只可能是文件夹，无需去除扩展名
     return {
-      text: title || item.name,
-      items: children,
+      text: title || item.name.replace(/\.md$/, ''),
+      link,
       activeMatch,
-    } as DefaultTheme.NavItemWithChildren
+    } as DefaultTheme.NavItemWithLink
   }
 }
 
