@@ -1,21 +1,18 @@
 import type { Plugin, SiteConfig } from 'vitepress'
-import type { FileInfo, Item, Options } from './types'
+import type { FileInfo, FolderInfo, Item, Options } from './types'
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, utimes, writeFile } from 'node:fs/promises'
 import { basename, join, normalize, sep } from 'node:path'
 import { defaultComparer } from './comparer'
-import { defaultNavHandler, defaultNavItemHandler, defaultSidebarHandler, defaultSidebarItemHandler } from './handler'
-import { assertFile, assertFolder, compactCache, debounce, deepHandle, deepSort, getFolderLink, getMarkdownData, getTimestamp, hasLocalSearch } from './utils'
+import { defaultHandler } from './handler'
+import { assertFile, assertFolder, compactCache, debounce, deepSort, getFolderLink, getMarkdownData, getTimestamp, hasLocalSearch } from './utils'
 
 // 导出工具方法
 export {
   assertFile,
   assertFolder,
   defaultComparer,
-  defaultNavHandler,
-  defaultNavItemHandler,
-  defaultSidebarHandler,
-  defaultSidebarItemHandler,
+  defaultHandler,
   getFolderLink,
 }
 
@@ -25,21 +22,14 @@ export type * from './types'
 /**
  * vitepress 自动生成导航栏和侧边栏的插件
  */
-export function autoNav({
-  navItemHandler = defaultNavItemHandler(),
-  sidebarItemHandler = defaultSidebarItemHandler(),
-  comparer = defaultComparer(),
-  sidebarHandler = defaultSidebarHandler(),
-  navHandler = defaultNavHandler(),
-}: Options = {}): Plugin {
+export function autoNav(
+  {
+    comparer = defaultComparer(),
+    handler = defaultHandler(),
+  }: Options = {},
+): Plugin {
   // 参数校验
-  Object.entries({
-    navItemHandler,
-    sidebarItemHandler,
-    defaultComparer,
-    sidebarHandler,
-    navHandler,
-  }).forEach(([key, value]) => {
+  Object.entries({ comparer, handler }).forEach(([key, value]) => {
     if (typeof value !== 'function')
       throw new TypeError(`${key} 必须是一个函数`)
   })
@@ -98,6 +88,10 @@ export function autoNav({
           return
         }
 
+        // 删除文件夹
+        if (eventName === 'unlinkDir') { }
+        // 删除文件，同步删除缓存
+        if (path.endsWith('.md') && eventName === 'unlink') {}
         // md 文件修改同步操作缓存，减少计算量
         if (path.endsWith('.md') && eventName === 'change') {
           // 存储当前级别对象，可以直接操作
@@ -115,8 +109,8 @@ export function autoNav({
                 p.push(i)
               return p
             }, [])
-            if (!searchedIndexes.length)
-              return
+            if (searchedIndexes.length)
+              break
 
             searchedIndexes.forEach(async (searchedIndex) => {
               // 更新缓存中的 localModifyTime
@@ -140,6 +134,33 @@ export function autoNav({
             })
           }
         }
+        // 路径加载器变更，只删除由原路径加载器生成的缓存，减少计算量
+        else if (dynamicLoaderRe.test(path) && eventName === 'change') {
+          // 存储当前级别对象，可以直接操作
+          let current = cache
+
+          // 按路径级别操作每一级缓存数据
+          const parts = path.replace(`${baseDir}${sep}`, '').split(sep)
+          for (let i = 0; i < parts.length; i++) {
+            // 文件夹
+            if (i < parts.length - 1) {
+              const targetIndex = cache.findIndex(item => (item as FileInfo).originName || item.name === parts[i])
+              if (targetIndex === -1)
+                break
+
+              current = (current[targetIndex] as FolderInfo).children
+            }
+            // 文件
+            else {
+              for (let ci = 0; ci < current.length; ci++) {
+                if ((current[ci] as FileInfo).originName === parts[i].replace(/\.paths\.m?[jt]s$/, '.md')) {
+                  current.splice(ci, 1)
+                  ci--
+                }
+              }
+            }
+          }
+        }
 
         // 动态路由加载器变更，或 md 文件其他操作，直接刷新
         debouncedRestart()
@@ -158,7 +179,7 @@ export function autoNav({
         userConfig,
       } = config.vitepress as SiteConfig
 
-      const { locales } = userConfig // { root: { label: '简体中文' }, en: { label: 'English' } }，同用户设置
+      // const { locales } = userConfig // { root: { label: '简体中文' }, en: { label: 'English' } }，同用户设置
 
       // 记录关键配置并标准化路径
       baseDir = normalize(srcDir)
@@ -267,11 +288,7 @@ export function autoNav({
       // 数据缓存
       writeFile(join(cacheDir, CACHE_FILE), JSON.stringify({ cache, rewrites }))
       // 数据处理
-      const sidebar = deepHandle(cache, sidebarItemHandler, rewrites, locales)
-      const nav = deepHandle(cache, navItemHandler, rewrites, locales)
-      // 修改配置
-      sidebarHandler(config, sidebar, { locales, rewrites })
-      navHandler(config, nav, { locales, rewrites })
+      handler(config, cache)
     },
   }
 }

@@ -2,7 +2,7 @@
   "name": "vite-plugin-vitepress-auto-nav",
   "type": "module",
   "version": "4.0.0",
-  "packageManager": "pnpm@10.11.1",
+  "packageManager": "pnpm@10.13.1",
   "description": "自动生成 vitepress nav 与 sidebar 的插件",
   "author": "xavi",
   "license": "MIT",
@@ -50,15 +50,15 @@
   },
   "dependencies": {
     "front-matter": "^4.0.2",
-    "minimatch": "^10.0.1"
+    "minimatch": "^10.0.3"
   },
   "devDependencies": {
-    "@antfu/eslint-config": "^4.13.0",
+    "@antfu/eslint-config": "^5.0.0",
     "@rollup/plugin-node-resolve": "^16.0.1",
-    "@types/node": "^22.15.18",
-    "eslint": "^9.26.0",
-    "lint-staged": "^16.0.0",
-    "rollup": "^4.40.2",
+    "@types/node": "^24.1.0",
+    "eslint": "^9.31.0",
+    "lint-staged": "^16.1.2",
+    "rollup": "^4.45.1",
     "rollup-plugin-dts": "^6.2.1",
     "rollup-plugin-typescript2": "^0.36.0",
     "simple-git-hooks": "^2.13.0",

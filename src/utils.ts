@@ -1,5 +1,5 @@
 import type { LocaleConfig, SiteConfig, UserConfig } from 'vitepress'
-import type { ChildrenLinks, FileInfo, FolderInfo, Item, ItemHandler, Recordable, TimesInfo } from './types'
+import type { FileInfo, FolderInfo, Item, Recordable, TimesInfo } from './types'
 import { exec } from 'node:child_process'
 import { readFile, stat } from 'node:fs/promises'
 import { promisify } from 'node:util'
@@ -43,16 +43,19 @@ export async function getMarkdownData(path: string, params: Recordable = {}): Pr
  * 文件夹中存在 index.md 时，返回文件夹自身路径；否则返回第一篇子 md 路径（若有），或第一个子文件夹下的第一篇 md 路径
  * @example
  * ```ts
- * getFolderLink(folderData) // 可能返回 `/folder/index` 或 `/folder/sub/anyMd`
+ * getFolderLink(folderData) // 可能返回 `/folder/index` 或 /folder/first` 或 `/folder/sub/anyMd`
  * ```
  */
 export function getFolderLink(item: FolderInfo, onlyIndex: boolean = false): string | undefined {
   if (!item.children?.length)
     return
 
-  const index = item.children.find(i => assertFile(i) && i.link.endsWith('/index')) as FileInfo | undefined
+  const index = item.children.find((i): i is FileInfo => {
+    return assertFile(i) && i.link.endsWith('/index')
+  })
   if (index)
-    return index.link.replace(/index$/, '')
+    // TODO: rewrite 不同的 index，是否会影响
+    return index.link
   else if (onlyIndex)
     return
 
@@ -105,23 +108,6 @@ export function deepSort(
       deepSort(item.children, comparer)
     }
   }
-}
-
-/** 调用 handler 生成 sidebar 或 nav */
-export function deepHandle<T extends Recordable>(list: Item[], handler: ItemHandler<T>, rewrites: SiteConfig['rewrites'], locales?: LocaleConfig): T[] {
-  const result: T[] = []
-  for (const item of list) {
-    let children
-    let childrenLinks
-    if (assertFolder(item)) {
-      children = deepHandle(item.children, handler, rewrites, locales)
-      childrenLinks = getChildrenLinks(item.children, rewrites.inv)
-    }
-    const res = handler({ item, children, locales, rewrites, childrenLinks })
-    if (res)
-      result.push(res)
-  }
-  return result
 }
 
 /** 整理缓存，删除无用数据 */
@@ -179,30 +165,6 @@ export function debounce<T extends (...args: any[]) => any>(
       timer = null
     }, delay)
   }
-}
-
-/**
- * 获取文件夹下重写及未重写的链接
- */
-export function getChildrenLinks(items: Item[], inv: SiteConfig['rewrites']['inv']): ChildrenLinks {
-  const notRewrites: string[] = []
-  const rewrites: string[] = []
-  for (const item of items) {
-    if (assertFolder(item)) {
-      const { notRewrites: n, rewrites: r } = getChildrenLinks(item.children, inv)
-      notRewrites.push(...n)
-      rewrites.push(...r)
-    }
-    else {
-      if (inv[`${item.link.slice(1)}.md`]) {
-        rewrites.push(item.link)
-      }
-      else {
-        notRewrites.push(item.link)
-      }
-    }
-  }
-  return { notRewrites, rewrites }
 }
 
 /** 断言数据是文件 */
