@@ -27,7 +27,7 @@ pnpm i vite-plugin-vitepress-auto-nav vite -D
 
 ```ts
 // .vitepress/config.ts
-import AutoNav from "vite-plugin-vitepress-auto-nav";
+import AutoNav from 'vite-plugin-vitepress-auto-nav'
 
 export default defineConfig({
   vite: {
@@ -37,7 +37,7 @@ export default defineConfig({
       }),
     ],
   },
-});
+})
 ```
 
 3. 正常启动项目即可使用

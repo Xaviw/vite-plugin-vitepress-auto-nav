@@ -10,3 +10,7 @@ logs
 node_modules
 temp
 cache
+.serena
+.claude/plans
+*.local
+*.local.*
