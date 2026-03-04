@@ -1,14 +1,17 @@
 import js from '@eslint/js'
+import { includeIgnoreFile } from '@eslint/compat'
+import { defineConfig } from 'eslint/config'
+import { URL, fileURLToPath } from 'node:url'
 import tseslint from 'typescript-eslint'
-import prettier from 'eslint-plugin-prettier/recommended'
+import eslintConfigPrettier from 'eslint-config-prettier'
 
-export default tseslint.config(
+const gitignorePath = fileURLToPath(new URL('.gitignore', import.meta.url))
+
+export default defineConfig(
+  includeIgnoreFile(gitignorePath),
   js.configs.recommended,
   ...tseslint.configs.recommended,
-  prettier,
-  {
-    ignores: ['dist', 'node_modules', '*.mjs', 'example', '.vitepress'],
-  },
+  eslintConfigPrettier,
   {
     rules: {
       '@typescript-eslint/no-explicit-any': 'warn',

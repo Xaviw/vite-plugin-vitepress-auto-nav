@@ -1,6 +1,0 @@
-dist
-node_modules
-*.mjs
-pnpm-lock.yaml
-example
-.vitepress
