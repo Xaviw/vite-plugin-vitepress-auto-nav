@@ -1,14 +1,12 @@
 {
   "name": "vite-plugin-vitepress-auto-nav",
-  "version": "3.0.0",
-  "description": "自动生成vitepress的nav与sidebar",
+  "version": "4.0.0",
+  "description": "Auto-generate VitePress default-theme nav and sidebar from runtime pages",
   "keywords": [
     "vitepress",
     "vite-plugin",
     "vitepress-plugin",
     "vitepress-auto",
-    "vitepress-gitbook",
-    "vitepress-summary",
     "auto-nav",
     "auto-sidebar",
     "auto-menu"
@@ -32,15 +30,21 @@
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist",
-    "types"
+    "dist"
   ],
+  "sideEffects": false,
   "scripts": {
-    "build": "rollup -c",
+    "build": "node -e \"const fs = require('node:fs'); fs.rmSync('dist', { recursive: true, force: true })\" && rollup -c",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write . --ignore-path .gitignore",
-    "prepare": "simple-git-hooks"
+    "test": "pnpm test:unit:coverage && pnpm test:integration",
+    "test:unit": "vitest run tests/unit --coverage.enabled=false",
+    "test:unit:coverage": "vitest run tests/unit --coverage",
+    "test:integration": "vitest run tests/integration --coverage.enabled=false",
+    "test:watch": "vitest",
+    "prepare": "simple-git-hooks",
+    "prepublishOnly": "pnpm lint && pnpm test:unit && pnpm test:integration && pnpm build"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm lint-staged"
@@ -55,31 +59,31 @@
     ]
   },
   "dependencies": {
-    "fast-glob": "^3.3.1",
     "gray-matter": "^4.0.3"
   },
   "devDependencies": {
     "@eslint/compat": "^2.0.2",
     "@eslint/js": "^10.0.1",
-    "@rollup/plugin-node-resolve": "^15.2.3",
-    "@rollup/plugin-terser": "^0.4.3",
-    "@types/node": "^20.5.9",
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "@rollup/plugin-terser": "^1.0.0",
+    "@types/node": "^25.3.5",
+    "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^10.0.2",
     "eslint-config-prettier": "^10.1.8",
-    "lint-staged": "^16.3.1",
+    "lint-staged": "^16.3.2",
     "prettier": "^3.8.1",
-    "rollup": "^3.29.1",
-    "rollup-plugin-typescript2": "^0.35.0",
+    "rollup": "^4.59.0",
+    "rollup-plugin-typescript2": "^0.36.0",
     "simple-git-hooks": "^2.13.1",
-    "typescript": "^5.2.2",
-    "typescript-eslint": "^8.56.1"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.1",
+    "vitest": "^4.0.18"
   },
   "peerDependencies": {
-    "vite": ">=4.0.0",
     "vitepress": ">=1.0.0"
   },
   "engines": {
     "node": ">=18.0.0"
   },
-  "packageManager": "pnpm@9.5.0"
+  "packageManager": "pnpm@10.31.0+sha512.e3927388bfaa8078ceb79b748ffc1e8274e84d75163e67bc22e06c0d3aed43dd153151cbf11d7f8301ff4acb98c68bdc5cadf6989532801ffafe3b3e4a63c268"
 }

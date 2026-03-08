@@ -9,5 +9,5 @@ export default {
     format: 'esm',
   },
   plugins: [typescript(), nodeResolve(), terser()],
-  external: ['fast-glob', 'gray-matter'],
+  external: ['gray-matter'],
 }

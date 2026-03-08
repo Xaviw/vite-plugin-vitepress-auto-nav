@@ -1,0 +1,16 @@
+{
+  "name": "vitepress-auto-nav-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vitepress dev projects/output-preserve",
+    "build": "vitepress build projects/output-preserve",
+    "preview": "vitepress preview projects/output-preserve",
+    "dev:case": "vitepress dev",
+    "build:case": "vitepress build",
+    "preview:case": "vitepress preview"
+  },
+  "devDependencies": {
+    "vitepress": "1.6.4"
+  }
+}

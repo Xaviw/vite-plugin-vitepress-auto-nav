@@ -1,47 +1,97 @@
-# 仓库指南
+# AGENTS.md
 
-## 项目结构与模块组织
+本文件为在本仓库中协作的编码代理提供最小必要说明。
 
-- 插件核心代码位于 `src/`：
-  - `index.ts`：插件入口与 Vite/VitePress 生命周期钩子。
-  - `parseArticle.ts` / `parseSummary.ts`：生成 `nav` 和 `sidebar` 的核心逻辑。
-  - `utils.ts`：通用工具函数（刷新、节流、时间戳处理）。
-- 类型声明文件位于 `types/index.d.ts`。
-- 构建产物输出到 `dist/`（`index.mjs`、`.d.ts`），请勿手动修改。
-- 文档位于 `README.md` 与 `README-CN.md`。
+## 语言
 
-## 构建、校验与开发命令
+- 除非用户明确要求，否则与用户的交流、文档更新、代码注释统一使用中文。
+- 代码标识符、类型名、API 名保持原文。
 
-- `pnpm build`：使用 Rollup 打包插件到 `dist/index.mjs`。
-- `pnpm lint`：运行 ESLint 检查仓库代码。
-- `pnpm lint:fix`：自动修复可处理的 lint 问题。
-- `pnpm format`：使用 Prettier 统一格式。
-- `pnpm prepare`：通过 `simple-git-hooks` 安装 Git hooks（通常安装依赖后自动执行）。
+## 项目定位
 
-## 代码风格与命名规范
+这是一个 VitePress 插件，用于基于 **VitePress runtime pages** 自动生成默认主题的 `nav` 与 `sidebar`。
 
-- 语言：TypeScript（ESM，`tsconfig.json` 开启严格模式）。
-- 格式：Prettier（见 `.prettierrc`）：2 空格缩进、单引号、无分号、`es5` 尾随逗号、行宽 80。
-- 规范检查：ESLint + `typescript-eslint` + Prettier 集成。
-- 命名建议：
-  - 文件/模块使用 `camelCase`（如 `parseSummary.ts`）；
-  - 导出函数与类型按语义使用 `camelCase` / `PascalCase`。
-- 有意未使用的变量或参数请加 `_` 前缀，以满足 lint 规则。
+当前主流程：
 
-## 测试指南
+1. 归一化用户配置
+2. 解析 VitePress 运行时上下文
+3. 解析页面来源（pages / rewrites / dynamic routes / locales）
+4. 读取内容元数据（frontmatter / H1）
+5. 构建 locale 树
+6. 生成 nav / sidebar
+7. 合并回 themeConfig
+8. 在开发态 watch 中按需重算
 
-- 当前仓库暂无独立自动化测试套件（未定义 `npm test`）。
-- 提交 PR 前的最低校验要求：
-  - 执行 `pnpm lint`；
-  - 执行 `pnpm build`；
-  - 在 VitePress 项目中验证插件行为（`nav`/`sidebar` 生成与刷新逻辑）。
+## 关键目录
 
-## 提交与 Pull Request 规范
+- `src/index.ts`：插件对外入口
+- `src/core/`：核心实现
+  - `plugin.ts`：主编排与 watch 流程
+  - `normalizeOptions.ts`：配置归一化
+  - `pageSource.ts`：页面来源解析
+  - `contentMeta.ts`：内容元数据解析
+  - `treeBuilder.ts`：目录树构建
+  - `navBuilder.ts`：nav 生成
+  - `sidebarBuilder.ts`：sidebar 生成
+  - `merger.ts`：themeConfig 合并
+  - `watcher.ts`：watch 判定与防抖
+  - `cache.ts`：hash 与跳过重算逻辑
+- `src/types/`：公开配置与内部模型类型
+- `tests/unit/`：单元测试
+- `tests/integration/`：集成测试
+- `example/projects/`：集成测试使用的示例场景
+- `dist/`：构建产物，不要手动修改
 
-- 提交信息遵循历史约定前缀：`feat:`、`fix:`、`chore:`、`docs:`、`build:`。
-- 单次提交应聚焦单一变更，避免将纯格式化修改与功能/修复混在一起。
-- PR 建议包含：
-  - 清晰的行为变更说明；
-  - 关联 issue（如适用）；
-  - 可复现的配置或示例（尤其是插件参数与 frontmatter 场景）。
-- 若涉及用户可见行为变更，请附 `nav`/`sidebar` 生成结果的前后对比片段。
+## 当前公开配置
+
+以 `src/types/plugin.ts` 为准。当前对外参数包括：
+
+- `include`
+- `exclude`
+- `standaloneIndex`
+- `overrides`
+- `frontmatterKeyPrefix`
+- `sorter`
+- `preferArticleTitle`
+- `dev`
+
+## 关键行为约束
+
+- `nav`：如果用户已手写配置，则保留用户配置。
+- `sidebar`：由插件生成结果覆盖。
+- 默认跳过站点根 `index.md` 与 locale 根 `index.md`。
+- 当前仓库已移除旧的 `SUMMARY.md` 主生成链路，不要重新引入旧兼容逻辑，除非用户明确要求。
+- 更新文档时，以真实代码与测试为准，不要依赖历史命名或旧参数。
+
+## 常用命令
+
+- 安装依赖：`pnpm install`
+- 构建：`pnpm build`
+- lint：`pnpm lint`
+- 自动修复 lint：`pnpm lint:fix`
+- 格式化：`pnpm format`
+- 全量测试：`pnpm test`
+- 单元测试：`pnpm test:unit`
+- 集成测试：`pnpm test:integration`
+- watch 测试：`pnpm test:watch`
+
+## 验证建议
+
+修改代码后，优先按影响范围执行：
+
+1. `pnpm test:unit`
+2. 必要时执行 `pnpm test:integration`
+3. 最后执行 `pnpm build`
+
+如果只改文档或说明文件，可不运行测试。
+
+## 文档同步
+
+当以下内容变化时，应检查文档是否同步：
+
+- `src/types/plugin.ts`
+- `README.md`
+- `README-CN.md`
+- `PLUGIN-FEATURES.md`
+
+文档中若引用类型名，应优先使用当前仍存在的公开接口名称。

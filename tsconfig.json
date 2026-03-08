@@ -14,5 +14,5 @@
     "noUnusedParameters": true,
     "skipLibCheck": true
   },
-  "include": ["types/*.d.ts", "src/*.ts"]
+  "include": ["src/**/*.ts"]
 }

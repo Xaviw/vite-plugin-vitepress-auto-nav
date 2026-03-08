@@ -1,21 +1,34 @@
-.cache
+# 系统与编辑器
 .DS_Store
-.idea
-*.log
+.idea/
+.vscode/
+
+# 依赖与包管理缓存
+node_modules/
+.pnpm-store/
+example/node_modules/
+example/.pnpm-store/
+
+# 构建与测试产物
+dist/
+coverage/
+.temp/
 *.tgz
-coverage
-dist
-lib-cov
-logs
-node_modules
-temp
-cache
-.serena
-.claude/plans
+
+# VitePress 示例项目构建产物
+**/.vitepress/dist/
+**/.vitepress/cache/
+
+# 日志
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# 本地工具目录
+.cache/
+.serena/
+.codex/
+.claude/
+
+# 本地环境配置
 *.local
-*.local.*
-.docs
-*.mjs
-pnpm-lock.yaml
-example
-.vitepress
